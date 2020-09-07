@@ -16,24 +16,28 @@ footnotereturnlinkcontents = "↩"
     url = "/"
     weight = 1
 [[menu.main]]
-    name = "About"
-    url = "/about/"
+    name = "Posts"
+    url = "/post/"
     weight = 2
+[[menu.main]]
+    name = "About"
+    url = "/about-rmd/"
+    weight = 4
 [[menu.main]]
     name = "Categories"
     url = "/categories/"
-    weight = 3
+    weight = 5
 [[menu.main]]
     name = "Tags"
     url = "/tags/"
-    weight = 4
-[[menu.main]]
-    name = "Subscribe"
-    url = "/index.xml"
+    weight = 6
+#[[menu.main]]
+#    name = "Subscribe"
+#    url = "/index.xml"
 
 [params]
     description = "A website built through Hugo and blogdown."
-    footer = "&copy; [Coy McNew](https://www.coymcnew.com) 2020 -- 2020 | [Github](https://github.com/mcnewcpi)"
+    footer = "&copy; [Coy McNew](https://www.coymcnew.com) 2020 -- 2020 | [Github](https://github.com/mcnewcp)"
 
 [markup]
   [markup.goldmark]

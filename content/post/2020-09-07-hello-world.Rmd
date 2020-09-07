@@ -1,0 +1,13 @@
+---
+title: Hello World!
+author: Coy McNew
+date: '2020-09-07'
+slug: hello-world
+categories: []
+tags:
+  - introduction
+---
+
+This is my kickoff post for the website.  There's no real content here.  I just wanted to start things off with a nice and easy one.  Thanks for reading and wish me luck on building and maintaining this website!  
+
+![](https://media.giphy.com/media/6sdNffW2EVxBe/giphy.gif)
