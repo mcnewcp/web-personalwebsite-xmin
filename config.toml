@@ -1,6 +1,6 @@
-baseurl = "/"
+baseurl = "https://www.coymcnew.com/"
 languageCode = "en-us"
-title = "A minimal Hugo website"
+title = "Coy's Personal Website"
 theme = "hugo-xmin"
 googleAnalytics = ""
 disqusShortname = ""
@@ -33,7 +33,7 @@ footnotereturnlinkcontents = "↩"
 
 [params]
     description = "A website built through Hugo and blogdown."
-    footer = "&copy; [Yihui Xie](https://yihui.name) 2017 -- 2019 | [Github](https://github.com/yihui) | [Twitter](https://twitter.com/xieyihui)"
+    footer = "&copy; [Coy McNew](https://www.coymcnew.com) 2020 -- 2020 | [Github](https://github.com/mcnewcpi)"
 
 [markup]
   [markup.goldmark]
