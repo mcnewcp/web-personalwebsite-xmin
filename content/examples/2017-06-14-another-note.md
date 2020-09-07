@@ -6,6 +6,7 @@ date: "2017-06-14"
 slug: another-note
 # tags:
 # - Tutorial
+draft: true
 title: Another Note on A blogdown Tutorial
 ---
 
