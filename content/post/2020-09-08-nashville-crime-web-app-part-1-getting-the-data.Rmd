@@ -1,0 +1,104 @@
+---
+title: 'Nashville Crime Web App Part 1: Getting the Data'
+author: Coy McNew
+date: '2020-09-08'
+slug: nashville-crime-web-app-part-1-getting-the-data
+categories:
+  - Nashville Crime Web App
+tags:
+  - Socrata
+  - SQL
+  - SoQL
+draft: true
+---
+
+<style>
+.html-widget {
+    margin: auto;
+}
+</style>
+
+# 
+
+``` {r echo=FALSE, message=FALSE, fig.align="center"}
+library(tidyverse)
+library(RSocrata)
+library(leaflet)
+#load map data
+mapDF <- read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'") %>%
+  filter(!is.na(latitude) | !is.na(longitude)) %>% 
+  mutate(datetime_numeric = as.numeric(incident_occurred)) 
+#generate map color palette
+pal <- colorNumeric(palette = "viridis", domain = mapDF$datetime_numeric)
+#function for formatting legend labels
+myLabFormat = function(type = "numeric", cuts) {
+  as.POSIXct(cuts, origin = "1970-01-01") %>% as.character()
+}
+#generate html widget map with leaflet
+mapDF %>%
+  leaflet() %>%
+  addProviderTiles(providers$Esri.WorldGrayCanvas) %>%
+  addCircleMarkers(
+    lng = ~longitude, lat = ~latitude, fillColor = ~pal(datetime_numeric), fillOpacity = 0.7,
+    color = 'black', opacity = 1, weight = 0.5,
+    label = ~lapply(paste0(
+      "Date of Occurrence: ",      incident_occurred,
+      "<br>Location: ",            incident_location,
+      "<br>Offense Description: ", offense_description, 
+      "<br>Weapon Description: ",  weapon_description,
+      "<br>Number of Victims: ",   victim_number,
+      "<br>Victim Description: ",  victim_description,
+      "<br>Victim Gender: ",       victim_gender,
+      "<br>Victim Race: ",         victim_race,
+      "<br>Victim Ethnicity: ",    victim_ethnicity
+    ), htmltools::HTML)
+  ) %>%
+  addLegend(
+    "topright", pal = pal, values = ~datetime_numeric, opacity = 1, labFormat = myLabFormat,
+    title = "Incident Date Time"
+  )
+rm(mapDF, pal, myLabFormat)
+```
+
+# Objective
+
+The object of this series of posts is to catalog my effort on a project which:
+
+1. Connects directly to publicly available data from data.nashville.gov
+2. Summarizes the information in an interactive map
+3. Mines a text description field to summarize in a visual and allow for keyword searching
+4. Runs as a Shiny web app, hosted on shinyapps.io for anyone to use
+
+I have chosen the police incident dataset for use in this project, publicly available here, because ~~I'm a new father and worried about these things~~ I find it interesting.  This first post is all about connecting directly to this dataset on Socrata and using a little SoQL to increase the efficiency of our query.  I knew very little about this aspect of the project before beginning, so I actually learned quite a bit.  This will likely be a very useful post for me to reference in the future.
+
+# Data Source
+
+The city of Nashville provides quite a bit of public data through their website data.nashville.gov, including a record of Metro Nashville Police Department Incidents.  These datasets are split by year, so here is the 2020 dataset.  The data here is quite detailed, including lat/lon, if not a little slow to update.  As of writing this post on 2020-09-09, the most recent record in the database is from 2020-08-03 at 19:30.  You can see a quick interactive map of the data for the month of August at the beginning of this post.  
+
+# Socrata API and RSocrata
+
+The data we want lives at the link above, but we can query that dataset through an API provided by Socrata.  The RSocrata package makes these queries a little bit easier to carry out directly from R.  All we need to get going is the direct url of the dataset, which we can pass to the read.socrata() function.  This dataset is quite large, however and so querying the entire thing takes quite a while.
+
+``` {r}
+library(RSocrata)
+ptm <- proc.time()
+df <- read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv")
+proc.time() - ptm
+```
+
+In this case, it took over 100 seconds to complete the request.  If our goal is to include this query in a Shiny app, we can't expect the user to way nearly 2 minutes to see results.  Also, this pulls the entire year's worth of data.  Most users probably won't care about the majority of that dataset.
+
+## SoQL
+
+Luckily, the Socrata API provides query functionality through a pseudo-language they call Socrata Query Language, or SoQL. https://dev.socrata.com/docs/queries/.  They note that this is very similar to SQL, though I'll have to take their word for it as I've never used SQL.  The query parameters in the provided table can be appended directly to the url of the request to allow us to filter rows, select columns, sort by columns, etc. and you can combine query parameters with `&`.  I'm going to use `$where` and `$order` parameters below to query the database for all data in the month of August 2020 and then order the results by date.
+
+``` {r}
+ptm <- proc.time()
+df <-  read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'")
+proc.time() - ptm
+```
+
+Ok, that time the query took less than a second!  That's quite the improvement.  This Shiny app just might be doable after all...
+
+## Throttling and App Keys
+
