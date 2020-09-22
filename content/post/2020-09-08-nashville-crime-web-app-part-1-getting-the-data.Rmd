@@ -9,7 +9,7 @@ tags:
   - Socrata
   - SQL
   - SoQL
-draft: true
+# draft: true
 ---
 
 <style>
@@ -25,7 +25,7 @@ library(tidyverse)
 library(RSocrata)
 library(leaflet)
 #load map data
-mapDF <- read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'") %>%
+mapDF <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'") %>%
   filter(!is.na(latitude) | !is.na(longitude)) %>% 
   mutate(datetime_numeric = as.numeric(incident_occurred)) 
 #generate map color palette
@@ -62,43 +62,68 @@ rm(mapDF, pal, myLabFormat)
 
 # Objective
 
-The object of this series of posts is to catalog my effort on a project which:
+The objective of this series of posts is to catalog my effort on a project which accomplishes the following:
 
-1. Connects directly to publicly available data from data.nashville.gov
-2. Summarizes the information in an interactive map
-3. Mines a text description field to summarize in a visual and allow for keyword searching
-4. Runs as a Shiny web app, hosted on shinyapps.io for anyone to use
+1. Connect directly to publicly available data from data.nashville.gov
+2. Summarize the information in an interactive map
+3. Mine text description fields to summarize in a visual and allow for keyword searching
+4. Run as a Shiny web app, hosted on [shinyapps.io](shinyapps.io) for anyone to use
 
-I have chosen the police incident dataset for use in this project, publicly available here, because ~~I'm a new father and worried about these things~~ I find it interesting.  This first post is all about connecting directly to this dataset on Socrata and using a little SoQL to increase the efficiency of our query.  I knew very little about this aspect of the project before beginning, so I actually learned quite a bit.  This will likely be a very useful post for me to reference in the future.
+I have chosen the police incident dataset for use in this project, publicly available [here](https://data.nashville.gov/Police/Metro-Nashville-Police-Department-Incidents/2u6v-ujjs), because ~~I'm a new father and worried about these things~~ I find it interesting.  This first post is all about connecting directly to this dataset on Socrata and using a little SoQL to increase the efficiency of our query.  I knew very little about this aspect of the project before beginning, so I actually learned quite a bit.  This will likely be a very useful post for me to reference in the future.
 
 # Data Source
 
-The city of Nashville provides quite a bit of public data through their website data.nashville.gov, including a record of Metro Nashville Police Department Incidents.  These datasets are split by year, so here is the 2020 dataset.  The data here is quite detailed, including lat/lon, if not a little slow to update.  As of writing this post on 2020-09-09, the most recent record in the database is from 2020-08-03 at 19:30.  You can see a quick interactive map of the data for the month of August at the beginning of this post.  
+The city of Nashville provides quite a bit of public data through their website [data.nashville.gov](data.nashville.gov), including a record of Metro Nashville Police Department Incidents.  These datasets are split by year, so here is the [2020 dataset](https://data.nashville.gov/Police/Metro-Nashville-Police-Department-Incidents/2u6v-ujjs).  The data here is quite detailed, including lat/lon, if not a little slow to update.  As of writing this post on 2020-09-09, the most recent record in the database is from 2020-08-03 at 19:30.  You can see a quick interactive map of the data for the month of August at the beginning of this post.  
 
 # Socrata API and RSocrata
 
-The data we want lives at the link above, but we can query that dataset through an API provided by Socrata.  The RSocrata package makes these queries a little bit easier to carry out directly from R.  All we need to get going is the direct url of the dataset, which we can pass to the read.socrata() function.  This dataset is quite large, however and so querying the entire thing takes quite a while.
+The data we want lives at the link above, but we can query that dataset through an API provided by Socrata.  The [`RSocrata`](https://github.com/Chicago/RSocrata) package makes these queries a little bit easier to carry out directly from R.  All we need to get going is the direct url of the dataset, which we can pass to the ````read.socrata()```` function.  This dataset is quite large, however and so querying the entire thing takes a long time.
 
 ``` {r}
 library(RSocrata)
 ptm <- proc.time()
-df <- read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv")
+df <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv")
 proc.time() - ptm
 ```
 
-In this case, it took over 100 seconds to complete the request.  If our goal is to include this query in a Shiny app, we can't expect the user to way nearly 2 minutes to see results.  Also, this pulls the entire year's worth of data.  Most users probably won't care about the majority of that dataset.
+In this case, it took over 100 seconds to complete the request.  If our goal is to include this query in a Shiny app, we can't expect the user to wait nearly 2 minutes to see results.  Also, this pulls the entire year's worth of data.  Most users probably won't care about the majority of that dataset.
 
 ## SoQL
 
-Luckily, the Socrata API provides query functionality through a pseudo-language they call Socrata Query Language, or SoQL. https://dev.socrata.com/docs/queries/.  They note that this is very similar to SQL, though I'll have to take their word for it as I've never used SQL.  The query parameters in the provided table can be appended directly to the url of the request to allow us to filter rows, select columns, sort by columns, etc. and you can combine query parameters with `&`.  I'm going to use `$where` and `$order` parameters below to query the database for all data in the month of August 2020 and then order the results by date.
+Luckily, the Socrata API provides query functionality through a pseudo-language they call Socrata Query Language, or [SoQL](https://dev.socrata.com/docs/queries/).  They note that this is very similar to SQL, though I'll have to take their word for it as I've never used SQL.  The query parameters in the provided table can be appended directly to the url of the request to allow us to filter rows, select columns, sort by columns, etc. and you can combine query parameters with ````&````.  I'm going to use ````$where```` and ````$order```` parameters below to query the database for all data in the month of August 2020 and then order the results by date.
 
 ``` {r}
 ptm <- proc.time()
-df <-  read.socrata("https://data.nashville.gov/resource/sie3-y9k4.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'")
+df <-  read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'")
 proc.time() - ptm
 ```
 
 Ok, that time the query took less than a second!  That's quite the improvement.  This Shiny app just might be doable after all...
 
-## Throttling and App Keys
+## Throttling and App Tokens
+
+Socrata [documentation](https://dev.socrata.com/docs/app-tokens.html) mentions that query requests may be throttled, unless an application token is used.
+
+> Without an application, we can only track usage and perform throttling based on a few simple criteria, mainly source IP address. As such, requests that aren’t using an application token come from a shared pool via IP address. IP addresses that make too many requests during a given period may be subject to throttling.
+
+> When requests are made using an application token, we can actually attribute each request to a particular application and developer, granting each their own pool of API requests. Currently we do not throttle API requests that are using an application token, *unless those requests are determined to be abusive or malicious*.
+
+It is very easy to obtain an application token from Socrata - simply create a free Socrata account, register the application, and request a token.  Instructions can be found in the [documentation](https://dev.socrata.com/docs/app-tokens.html).  I did exactly that for the current project but I won't post it here because it's secret!  The app token can then be passed to the `read.socrata()` function as follows:
+
+``` {r eval=FALSE}
+  read.socrata(
+    "https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >= '2020-08-01T00:00:00'",
+    app_token = my_app_token
+  )
+```
+
+# Conclusion
+
+In conclusion, we accomplished the following in this post:
+
+1. Connected directly to our database of choice using ````RSocrata````
+2. Increased efficiency of our query using SoQL
+3. Elimnated throttling by applying for an application token
+
+The next step of the process is to develop an interactive map for a geographic investigation of the data we just pulled.  This map should be an html widget so we can embed it in our eventual Shiny app.
 
