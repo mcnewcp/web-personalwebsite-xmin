@@ -9,7 +9,7 @@ tags:
   - leaflet
   - sf
   - geospatial
-draft: true
+# draft: true
 ---
 
 # Objective
@@ -21,15 +21,15 @@ The objective of this series of posts is to catalog my effort on a project which
 3. Mine text description fields to summarize in a visual and allow for keyword searching
 4. Run as a Shiny web app, hosted on [shinyapps.io](shinyapps.io) for anyone to use
 
-In this, the second post of a four part series, I'm discussing the interactive visuals.  We're going to be making an interactive map using `leaflet` and time series plot using `ggplot2` and `plotly`.
+In this, the second post of a four part series, I'm discussing one of the interactive visuals.  We're going to be making an interactive map using `leaflet` to sptially display the crime data we pulled in [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/).
 
 # Mapping
 
-There are several packages to develop very cool and polished interactive maps in R.  My favorites are [`leaflet`](), [`mapview`]() and [`tmap`]().  Both output html widgets and have corresponding shiny functions for integration into shiny web apps.  `mapview` makes a really excellent looking default map for quick viewing of a spatial dataset, but I tend to prefer `leaflet` for its customizability and because I'm most familiar with it.
+There are several packages to develop very cool and polished interactive maps in R.  My favorites are [`leaflet`](https://github.com/rstudio/leaflet), [`mapview`](https://github.com/r-spatial/mapview) and [`tmap`](https://github.com/mtennekes/tmap).  All three can be used to output html widgets and can be integrated into shiny web apps.  `mapview` makes a really excellent looking default map for quick viewing of a spatial dataset, but I tend to prefer `leaflet` for its customizability and my familiarity.
 
 ## Geospatial Data in R
 
-There has been a lot written about working with geospatial data in R.  My favorite resource is a fairly comprehensive guide by Robin Lovelace, Jakub Nowosad, and Jannes Muenchow called [Geocomputation with R](https://geocompr.robinlovelace.net).  There are several packages that make working with geospatial data more manageable in R, most notably the [`sf`]() package.  `sf` allows for the grouping of coordinates into a special geometry column on the right side of a dataframe, turning it into an object of class "sf".  This geometry column is sticky, meaning when you use typical tidy functions like filter or select, the geometry data remains attached to each corresponding row.  Many mapping packages recognize these "sf" objects as geospatial objects and so they use the appropriate geometry data automatically without explicitly assigning.   
+There has been a lot written about working with geospatial data in R.  My favorite resource is a fairly comprehensive guide by Robin Lovelace, Jakub Nowosad, and Jannes Muenchow called [Geocomputation with R](https://geocompr.robinlovelace.net).  There are several packages that make working with geospatial data more manageable in R, most notably the [`sf`](https://github.com/r-spatial/sf) package.  `sf` allows for the grouping of coordinates into a special geometry column on the right side of a dataframe, turning it into an object of class "sf".  This geometry column is sticky, meaning when you use typical tidy functions like filter or select, the geometry data remains attached to each corresponding row.  Many mapping packages recognize these "sf" objects as geospatial objects and so they use the appropriate geometry data automatically without explicitly assigning.   
 
 ## `leaflet` 
 
@@ -64,7 +64,7 @@ leaflet(mapSF) %>%
 
 ### Basemap
 
-That looks pretty good, but let's improve some default components and add some functionality and polish.  First, let's change the default basemap and add a basemap selection option.  `leaflet` provides a multitude of basemap options, and you can preview the options from a handy [web app](https://leaflet-extras.github.io/leaflet-providers/preview/).  Since I like very unobtrusive default basemap, I'll add CartoDB.Positron as the default option, with the popular OpenStreetMap.HOT as a toggle option for those who want more information.  Basemaps are added via `addProviderTiles()` and the basemap names are provided in the list `providers`.  I'll also add these as toggleable base layers by assigning a group name and then adding the groups as `baseGroups` in the `addLayersControl()` call.  
+That looks pretty good, but let's improve some default components and add some functionality and polish.  First, let's change the default basemap and add a basemap selection option.  `leaflet` provides a multitude of basemap options, and you can preview the options from a handy [web app](https://leaflet-extras.github.io/leaflet-providers/preview/).  Since I like a very unobtrusive default basemap, I'll add CartoDB.Positron as the default option, with the popular OpenStreetMap.HOT as a toggle option for those who want more information.  Basemaps are added via `addProviderTiles()` and the basemap names are provided in the list `providers`.  I'll also add these as toggleable base layers by assigning a group name and then adding the groups as `baseGroups` in the `addLayersControl()` call.  
 
 ```{r message=FALSE, warning=FALSE}
 leaflet(mapSF) %>%
@@ -82,7 +82,7 @@ leaflet(mapSF) %>%
 
 ### Tooltips
 
-Ok, the basemap is set so now let's add some functionality and polish with some tooltip information on mouse hover.  The `label =` argument within `addCircleMarkers()` allows us to add text information as html.  I'm going to use the [`htmltools`]() package to help me apply some bold and line breaks here.  You can just as easily type out the html needed, but I like to use the helper functions. I'm also going to make sure R understands we're supplying html by using `lapply(..., HTML)`.  As for what to include, I want to see a description of the crime and date of occurrence, address, and victim information so I'm going to pull the relevant information from each corresponding column.
+Ok, the basemap is set so now let's add some functionality and polish with some tooltip information on mouse hover.  The `label` argument within `addCircleMarkers()` allows us to add text information as html.  I'm going to use the [`htmltools`](https://github.com/rstudio/htmltools) package to help me apply some formatting and line breaks here.  You can just as easily type out the html needed, but I like to use the helper functions. I'm also going to make sure R understands we're supplying html by using `lapply(..., HTML)`.  As for what to include, I want to see a description of the crime and date of occurrence, address, and victim information so I'm going to pull the relevant information from each corresponding column.
 
 ```{r message=FALSE, warning=FALSE}
 library(htmltools)
@@ -116,7 +116,7 @@ Now to step this map up a notch, lets add some color coding for one of the varia
 mapSF <- mapSF %>%
   mutate(county_resident_YN = 
            case_when(
-             victim_county_resident == "RESIDENT"         ~  "Yes",
+              victim_county_resident == "RESIDENT"         ~  "Yes",
               victim_county_resident == "NON RESIDENT"     ~  "No",
               victim_county_resident %in% c("", "UNKNOWN") ~  "Unknown"
            ) %>%
@@ -124,7 +124,7 @@ mapSF <- mapSF %>%
   )
 ```
 
-`leaflet` provides several helper functions to define color functions for use within map building.  An explanation of these functions can be found [here](https://rstudio.github.io/leaflet/colors.html).  Below, I'm going to use `colorFactor()` to color map the values of our new residence variable and call this color function `cols()`.  I'll then define our fill colors by passing our new residence variable to the `cols()` function.
+`leaflet` provides several helper functions to define color mappings functions for use within map building.  An explanation of these functions can be found [here](https://rstudio.github.io/leaflet/colors.html).  Below, I'm going to use `colorFactor()` to map the values of our new residence variable and call this color function `cols()`.  I'll then define our fill colors by passing our new residence variable to the `cols()` function.
 
 ```{r message=FALSE, warning=FALSE}
 cols <- colorFactor("viridis", mapSF$county_resident_YN)
