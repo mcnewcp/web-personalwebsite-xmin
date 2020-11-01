@@ -1,0 +1,185 @@
+---
+title: 'Nashville Crime Web App Part 2.5: Time Series Visual'
+author: Coy McNew
+date: '2020-10-10'
+slug: nashville-crime-web-app-part-2-5-time-series-visual
+categories:
+  - Nashville Crime Web App
+tags:
+  - lubridate
+  - tidyverse
+  - ggplot2
+  - plotly
+# draft: true
+---
+
+<style>
+.html-widget {
+    margin: auto;
+}
+</style>
+
+#
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, fig.width=7, fig.height=3}
+library(tidyverse)
+library(RSocrata)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+#pull max date
+max_dt <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$limit=10") %>% 
+  pull(incident_occurred) %>%
+  max(na.rm=TRUE)
+#now pull n most recent weeks of data
+n <- 3
+start_dt <- max_dt - weeks(n)
+dataDF <- read.socrata(paste0(
+  "https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >", 
+  "'", format.POSIXct(start_dt, format = "%Y-%m-%dT%H:%M:%S"), "'"
+))
+
+sumDF <- dataDF %>%
+  mutate(
+    week_day = wday(incident_occurred, label = TRUE),
+    hour_day = hour(incident_occurred)
+  ) %>%
+  group_by(week_day, hour_day) %>%
+  summarize(N=n())
+
+plotDF <- expand_grid(
+  week_day = levels(sumDF$week_day),
+  hour_day = seq(0,23)
+) %>% 
+  mutate_at(vars(week_day), ~factor(.x, levels=levels(sumDF$week_day), ordered=TRUE)) %>%
+  left_join(sumDF) %>%
+  mutate_at(vars(N), ~ifelse(is.na(.x), 0, .x))
+
+
+p <- ggplot(plotDF, aes(x=hour_day, y=week_day)) + 
+  geom_tile(aes(fill=N)) + 
+  geom_text(aes(label=N), color = 'white', size=3) +
+  scale_x_continuous(breaks = seq(0, 23)) +
+  scale_y_discrete(limits=rev(levels(plotDF$week_day))) + 
+  scale_fill_viridis_c() + 
+  labs(
+    title = "Total Crime Occurrences",
+    
+    y = "Day of Week", x = "Hour of Day"
+  ) + 
+  coord_equal() + 
+  theme_bw() + 
+  theme(legend.position = "none") 
+ggplotly(p) 
+```
+
+# Objective
+
+The objective of this series of posts is to catalog my effort on a project which accomplishes the following:
+
+1. Connect directly to publicly available data from [data.nashville.gov](https://data.nashville.gov)
+2. Summarize the information in an interactive map and time series
+3. Mine text description fields to summarize in a visual and allow for keyword searching
+4. Run as a Shiny web app, hosted on [shinyapps.io](shinyapps.io) for anyone to use
+
+In this post, hopefully a short one, we're going to explore the time series component of the data using [`ggplot2`](https://github.com/tidyverse/ggplot2) and [`plotly`](https://github.com/ropensci/plotly).  While exploring the time series component of the data, I decided it would be most interesting to view a heatmap of total crime broken down by day of week and time of day, as displayed above.
+
+# Data Prep
+
+## Connect to Dataset
+
+First things first, we need to load the data.  Below I'll load the 3 most recent weeks of data from the Nashville crime database, as described in [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/).  I'll accomplish this by first finding the maximum date time available in the dataset, subtracting 3 weeks from this value using the [`lubridate`](https://github.com/tidyverse/lubridate) package, and then pulling all 3 weeks of data using an SoQL query, also described in [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/).  Since this visual will be displaying all days of the week and all hours of the day, it's important we pull only full weeks of data, because if we include an incomplete week we could misrepresent the actual crime rate and bias conclusions drawn from the visual.
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(RSocrata)
+library(lubridate)
+#pull max date
+max_dt <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$limit=10") %>% 
+  pull(incident_occurred) %>%
+  max(na.rm=TRUE)
+#now pull n most recent weeks of data
+n <- 3
+start_dt <- max_dt - weeks(n)
+dataDF <- read.socrata(paste0(
+  "https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >", 
+  "'", format.POSIXct(start_dt, format = "%Y-%m-%dT%H:%M:%S"), "'"
+))
+```
+
+## Manipulate Data
+
+Next we're going to group the data by day of week and hour of day, then sum across each group to get totals.  We'll use the handy functions `wday()` and `hour()` from `lubridate` to extract the relevant information from the date time value of each row.  
+
+```{r message=FALSE, warning=FALSE}
+sumDF <- dataDF %>%
+  mutate(
+    #extract day of week and hour of day
+    week_day = wday(incident_occurred, label = TRUE),
+    hour_day = hour(incident_occurred)
+  ) %>%
+  #sum across day of week and hour of day
+  group_by(week_day, hour_day) %>%
+  summarize(N=n()) %>%
+  ungroup()
+str(sumDF)
+```
+
+Since it's possible that some hours on some days may not contain any crime data, we'll then produce a dataframe of all possible combinations of day and hour using `expand_grid()` and then populate it with the data we summed in the previous step using `left_join()`, adding zeros where we have no data.  Finally, we'll make our day of the week variable an ordered factor so it displays correctly on the visual.
+
+```{r message=FALSE, warning=FALSE}
+#generate a dataframe with all possible days and hours
+plotDF <- expand_grid(
+  week_day = levels(sumDF$week_day),
+  hour_day = seq(0,23)
+) %>% 
+  #add our sums from previous step
+  left_join(sumDF) %>%
+  #add zeros where we have no data
+  mutate_at(vars(N), ~ifelse(is.na(.x), 0, .x)) %>%
+  #make week day an ordered factor
+  mutate_at(vars(week_day), ~factor(.x, levels=levels(sumDF$week_day), ordered=TRUE))
+str(plotDF)
+```
+
+# Plotting
+
+Now that we've done the work up front to get the data into a tidy format, generating the visual will be quite simple.  We're going to use `geom_tile()` for the heat map and `geom_text()` to print totals in each cell.  Both functions are from the `ggplot2` package of course.
+
+```{r message=FALSE, warning=FALSE,  fig.width=7, fig.height=3}
+library(ggplot2)
+p <- ggplot(plotDF, aes(x=hour_day, y=week_day)) + 
+  #heatmap
+  geom_tile(aes(fill=N)) + 
+  #totals
+  geom_text(aes(label=N), color = 'white', size=3) +
+  scale_x_continuous(breaks = seq(0, 23)) +
+  scale_y_discrete(limits=rev(levels(plotDF$week_day)))
+p
+```
+
+Ok, that looks pretty good, we're getting there.  Now let's add some polish to finish it off.  First of all, let's choose a more striking color palette.  For sequential colors, my favorite is the [`viridis`](https://github.com/sjmgarnier/viridis) package.  We can add that directly to the plot through `scale_fill_viridis_c()`.  Let's also add a plot title, along with axes titles.  Next, I'm going to ensure the cells are squares by using `coord_equal()`, get rid of the gray background with `theme_bw()`, and hide the legend.  And finally, let's add some interactivity by passing the plot object to the handy function `ggplotly()` from the `plotly` package.
+
+```{r message=FALSE, warning=FALSE, fig.width=7, fig.height=3}
+p <- p +
+  scale_fill_viridis_c() + 
+  labs(
+    title = "Total Crime Occurrences",
+    y = "Day of Week", x = "Hour of Day"
+  ) + 
+  coord_equal() + 
+  theme_bw() + 
+  theme(legend.position = "none") 
+ggplotly(p) 
+```
+
+# Conclusions
+
+Alright, I think that visual looks pretty good!  It summarizes the crime hot spots in an intuitive and simple manner, so I think it'll work just fine.
+
+In conclusion we accomplished the following in this post:
+
+1. Summarized crime data from [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/) by day of week and hour of day.
+2. Generated an interactive heatmap of the summarized data.
+
+The next step is to look at the crime description field and see if we can find any interesting information in the text.
