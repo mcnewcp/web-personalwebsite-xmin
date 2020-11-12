@@ -1,0 +1,161 @@
+---
+title: 'Nashville Crime Web App Part 3: Word Cloud'
+author: Coy McNew
+date: '2020-11-09'
+slug: nashville-crime-web-app-part-3-world-cloud
+categories:
+  - Nashville Crime Web App
+tags:
+  - text mining
+  - word cloud
+# draft: true
+---
+
+
+
+<p><img src="/post/2020-11-09-nashville-crime-web-app-part-3-text-description_files/figure-html/unnamed-chunk-1-1.png" width="480" /></p>
+<div id="objective" class="section level1">
+<h1>Objective</h1>
+<p>The objective of this series of posts is to catalog my effort on a project which accomplishes the following:</p>
+<ol style="list-style-type: decimal">
+<li>Connect directly to publicly available data from <a href="https://data.nashville.gov">data.nashville.gov</a></li>
+<li>Summarize the information in an interactive map and time series</li>
+<li>Mine text description fields to summarize in a visual and allow for keyword searching</li>
+<li>Run as a Shiny web app, hosted on <a href="shinyapps.io">shinyapps.io</a> for anyone to use</li>
+</ol>
+<p>In this post we’re going to explore the text description column of the data using <a href="https://github.com/cran/tm"><code>tm</code></a> and <a href="https://github.com/cran/wordcloud"><code>wordcloud</code></a>. I’m not very experienced with text mining, and so this is a learning experience for me. I’m mainly following <a href="http://www.sthda.com/english/wiki/text-mining-and-word-cloud-fundamentals-in-r-5-simple-steps-you-should-know">this</a> guide from STHDA.</p>
+</div>
+<div id="data-prep" class="section level1">
+<h1>Data Prep</h1>
+<div id="connect-to-dataset" class="section level2">
+<h2>Connect to Dataset</h2>
+<p>Same as always, first we need to load the data. Below I’ll load the 3 most recent weeks of data from the Nashville crime database, as described in <a href="https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/">Part 1</a>. If you’d like to see more explanation around how this works, see <a href="https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/">Part 1</a> or <a href="https://www.coymcnew.com/post/2020/10/10/nashville-crime-web-app-part-2-5-time-series-visual/">Part 2.5</a>.</p>
+<pre class="r"><code>library(tidyverse)
+library(RSocrata)
+library(lubridate)
+#pull max date
+max_dt &lt;- read.socrata(&quot;https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &amp;$limit=10&quot;) %&gt;% 
+  pull(incident_occurred) %&gt;%
+  max(na.rm=TRUE)
+#now pull n most recent weeks of data
+n &lt;- 3
+start_dt &lt;- max_dt - weeks(n)
+dataDF &lt;- read.socrata(paste0(
+  &quot;https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &amp;$where=incident_occurred &gt;&quot;, 
+  &quot;&#39;&quot;, format.POSIXct(start_dt, format = &quot;%Y-%m-%dT%H:%M:%S&quot;), &quot;&#39;&quot;
+))</code></pre>
+</div>
+</div>
+<div id="text-mining" class="section level1">
+<h1>Text Mining</h1>
+<div id="prep-the-data" class="section level2">
+<h2>Prep the Data</h2>
+<p>Now for the interesting part. First, I’ll extract all the raw text from the offense_description column and dump it into a long vector of strings. Then I’ll take this raw text and convert to a corpus object using the <code>tm</code> package. As I said before, I’m not very experienced with text mining, but it seems the corpus object is how you load in a bunch of text documents and combine into an organized list. From there you can carry out all manipulations needed to arrive at your final dataset of terms and frequencies. Our corpus object in this case is going to be quite boring as we only have the one document.</p>
+<pre class="r"><code>library(tm)
+#extract raw text from offense_description column
+raw_text &lt;- paste(dataDF$offense_description, collapse = &quot; &quot;)
+#generate corpus object
+docs &lt;- Corpus(VectorSource(raw_text))
+str(docs)</code></pre>
+<pre><code>## List of 1
+##  $ 1:List of 2
+##   ..$ content: chr &quot;ASSAULT- FEAR OF BODILY INJURY OVERDOSE ROBBERY ROBBERY ASSAULT- FEAR OF BODILY INJURY FOUND PROPERTY FOUND PRO&quot;| __truncated__
+##   ..$ meta   :List of 7
+##   .. ..$ author       : chr(0) 
+##   .. ..$ datetimestamp: POSIXlt[1:1], format: &quot;2020-11-12 03:34:11&quot;
+##   .. ..$ description  : chr(0) 
+##   .. ..$ heading      : chr(0) 
+##   .. ..$ id           : chr &quot;1&quot;
+##   .. ..$ language     : chr &quot;en&quot;
+##   .. ..$ origin       : chr(0) 
+##   .. ..- attr(*, &quot;class&quot;)= chr &quot;TextDocumentMeta&quot;
+##   ..- attr(*, &quot;class&quot;)= chr [1:2] &quot;PlainTextDocument&quot; &quot;TextDocument&quot;
+##  - attr(*, &quot;class&quot;)= chr [1:2] &quot;SimpleCorpus&quot; &quot;Corpus&quot;</code></pre>
+</div>
+<div id="transform-and-clean-the-data" class="section level2">
+<h2>Transform and Clean the Data</h2>
+<p>In order to be able to do anything with the messy word soup we just created, we need to clean it up. I’m going to carry out a number of operations on our corpus object below, and I’m going to use <code>tm_map()</code> to apply each function to <code>docs</code>. Again, in this case we only have the one document so this isn’t very impressive, but you can imagine this being very efficient and elegant if I was carrying out these manipulations on thousands of web-scraped facebook posts or tweets. I think it’s pretty self explanatory what I’m doing in each cleaning/transformation step below, but I’ve included some comments just in case.</p>
+<pre class="r"><code>#replace some characters with spaces
+toSpace &lt;- content_transformer(function (x , pattern ) gsub(pattern, &quot; &quot;, x))
+docs &lt;- tm_map(docs, toSpace, &quot;&lt;&quot;) 
+docs &lt;- tm_map(docs, toSpace, &quot;&gt;&quot;) 
+docs &lt;- tm_map(docs, toSpace, &quot;-&quot;)
+# Convert the text to lower case
+docs &lt;- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs &lt;- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs &lt;- tm_map(docs, removeWords, stopwords(&quot;english&quot;))
+# Remove punctuations
+docs &lt;- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs &lt;- tm_map(docs, stripWhitespace)</code></pre>
+</div>
+<div id="generate-term-document-matrix" class="section level2">
+<h2>Generate Term-Document Matrix</h2>
+<p>Now we need to take our cleaned corpus object and generate a table of terms and their corresponding frequencies. To do this I’ll use <code>TermDocumentMatrix()</code> from the <code>tm</code> package. I’ll then arrange by frequency and convert to a tibble so we can take a look. I’ll print the top 10 rows to the console for inspection.</p>
+<pre class="r"><code>v &lt;- TermDocumentMatrix(docs) %&gt;%
+  as.matrix() %&gt;%
+  rowSums() %&gt;%
+  sort(decreasing = TRUE)
+termsDF &lt;- tibble(word = names(v),freq=v)
+termsDF %&gt;% slice(1:10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    word      freq
+##    &lt;chr&gt;    &lt;dbl&gt;
+##  1 inquiry    981
+##  2 police     981
+##  3 vehicle    782
+##  4 burglary   722
+##  5 property   592
+##  6 motor      582
+##  7 assault    556
+##  8 asslt      413
+##  9 damage     411
+## 10 prop       406</code></pre>
+<p>Alright, that looks pretty good. I didn’t expect to see “inquiry” at the top but what do I know? One thing I notice right away is that I have two versions of the word assault contained here: “assault” at #7 and “asslt” at #8. I think it’s important we combine these two as this is clearly a frequently used term, so I’m going to add one more step to our cleaning/transformation step and regenerate our frequency table.</p>
+<pre class="r"><code># replace asslt with assault
+docs &lt;- tm_map(docs, str_replace_all, &quot;asslt&quot;, &quot;assault&quot;)
+v &lt;- TermDocumentMatrix(docs) %&gt;%
+  as.matrix() %&gt;%
+  rowSums() %&gt;%
+  sort(decreasing = TRUE)
+termsDF &lt;- tibble(word = names(v),freq=v)
+termsDF %&gt;% slice(1:10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    word        freq
+##    &lt;chr&gt;      &lt;dbl&gt;
+##  1 inquiry      981
+##  2 police       981
+##  3 assault      969
+##  4 vehicle      782
+##  5 burglary     722
+##  6 property     592
+##  7 motor        582
+##  8 damage       411
+##  9 prop         406
+## 10 aggravated   384</code></pre>
+<p>Ok, that looks much better now. There are probably more abbreviations to be combined in this dataset, but that’s the only one I see in the top 10. If I notice more later, I’ll fix them as they come up. Now let’s move on to making the word cloud.</p>
+</div>
+</div>
+<div id="word-cloud" class="section level1">
+<h1>Word Cloud</h1>
+<p>To generate the word cloud, I’m going to use <code>wordcloud()</code> from the <code>wordcloud</code> package, fittingly. We simply need to supply the terms and corresponding frequencies, along with a couple other parameters to fine tune the output. I’m also choosing a color palette from the <a href="https://github.com/nanxstats/ggsci"><code>ggsci</code></a> package as I think they have some very professional looking palettes.</p>
+<pre class="r"><code>library(wordcloud)
+wordcloud(
+  words = termsDF$word, freq = termsDF$freq, min.freq = 5,
+  max.words=100, random.order=FALSE, rot.per=0.35, 
+  colors=ggsci::pal_jama()(10)
+)</code></pre>
+<p><img src="/post/2020-11-09-nashville-crime-web-app-part-3-text-description_files/figure-html/unnamed-chunk-7-1.png" width="384" /></p>
+<p>Ok, that looks pretty good! I think I’ll move forward with this word cloud and integrate into the Shiny app.</p>
+</div>
+<div id="conclusions" class="section level1">
+<h1>Conclusions</h1>
+<p>In conclusion we accomplished the following in this post:</p>
+<ol style="list-style-type: decimal">
+<li>Used some light text mining to summarize the offense description field of our crime dataset.</li>
+<li>Generated a wordcloud to visualize the text information.</li>
+</ol>
+<p>The next step is to integrate all of the analyses and visuals from Parts 1-3 of this series into a Shiny app and host it on a publicly available server. This is probably the hardest part of the entire process but I’m up for the challenge.</p>
+</div>

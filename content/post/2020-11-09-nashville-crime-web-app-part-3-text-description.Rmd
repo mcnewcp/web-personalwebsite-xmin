@@ -1,0 +1,182 @@
+---
+title: 'Nashville Crime Web App Part 3: Word Cloud'
+author: Coy McNew
+date: '2020-11-09'
+slug: nashville-crime-web-app-part-3-world-cloud
+categories:
+  - Nashville Crime Web App
+tags:
+  - text mining
+  - word cloud
+# draft: true
+---
+
+```{r message=FALSE, warning=FALSE, echo=FALSE, fig.width=5, fig.height=5}
+library(tidyverse)
+library(RSocrata)
+library(lubridate)
+library(tm)
+library(wordcloud)
+#pull max date
+max_dt <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$limit=10") %>% 
+  pull(incident_occurred) %>%
+  max(na.rm=TRUE)
+#now pull n most recent weeks of data
+n <- 3
+start_dt <- max_dt - weeks(n)
+dataDF <- read.socrata(paste0(
+  "https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >", 
+  "'", format.POSIXct(start_dt, format = "%Y-%m-%dT%H:%M:%S"), "'"
+))
+raw_text <- paste(dataDF$offense_description, collapse = " ")
+docs <- Corpus(VectorSource(raw_text))
+#replace some characters with spaces
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "<") 
+docs <- tm_map(docs, toSpace, ">") 
+docs <- tm_map(docs, toSpace, "-")
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# replace asslt with assault
+docs <- tm_map(docs, str_replace_all, "asslt", "assault")
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+v <- TermDocumentMatrix(docs) %>%
+  as.matrix() %>%
+  rowSums() %>%
+  sort(decreasing = TRUE)
+termsDF <- tibble(word = names(v),freq=v)
+wordcloud(words = termsDF$word, freq = termsDF$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=ggsci::pal_jama()(10))
+
+```
+
+# Objective
+
+The objective of this series of posts is to catalog my effort on a project which accomplishes the following:
+
+1. Connect directly to publicly available data from [data.nashville.gov](https://data.nashville.gov)
+2. Summarize the information in an interactive map and time series
+3. Mine text description fields to summarize in a visual and allow for keyword searching
+4. Run as a Shiny web app, hosted on [shinyapps.io](shinyapps.io) for anyone to use
+
+In this post we're going to explore the text description column of the data using [`tm`](https://github.com/cran/tm) and [`wordcloud`](https://github.com/cran/wordcloud).  I'm not very experienced with text mining, and so this is a learning experience for me.  I'm mainly following [this](http://www.sthda.com/english/wiki/text-mining-and-word-cloud-fundamentals-in-r-5-simple-steps-you-should-know) guide from STHDA.
+
+# Data Prep
+
+## Connect to Dataset
+
+Same as always, first we need to load the data.  Below I'll load the 3 most recent weeks of data from the Nashville crime database, as described in [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/).  If you'd like to see more explanation around how this works, see [Part 1](https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/) or [Part 2.5](https://www.coymcnew.com/post/2020/10/10/nashville-crime-web-app-part-2-5-time-series-visual/).
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(RSocrata)
+library(lubridate)
+#pull max date
+max_dt <- read.socrata("https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$limit=10") %>% 
+  pull(incident_occurred) %>%
+  max(na.rm=TRUE)
+#now pull n most recent weeks of data
+n <- 3
+start_dt <- max_dt - weeks(n)
+dataDF <- read.socrata(paste0(
+  "https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &$where=incident_occurred >", 
+  "'", format.POSIXct(start_dt, format = "%Y-%m-%dT%H:%M:%S"), "'"
+))
+```
+
+# Text Mining
+
+## Prep the Data
+
+Now for the interesting part.  First, I'll extract all the raw text from the offense_description column and dump it into a long vector of strings.  Then I'll take this raw text and convert to a corpus object using the `tm` package.  As I said before, I'm not very experienced with text mining, but it seems the corpus object is how you load in a bunch of text documents and combine into an organized list.  From there you can carry out all manipulations needed to arrive at your final dataset of terms and frequencies.  Our corpus object in this case is going to be quite boring as we only have the one document. 
+
+```{r warning=FALSE, message=FALSE}
+library(tm)
+#extract raw text from offense_description column
+raw_text <- paste(dataDF$offense_description, collapse = " ")
+#generate corpus object
+docs <- Corpus(VectorSource(raw_text))
+str(docs)
+```
+
+## Transform and Clean the Data
+
+In order to be able to do anything with the messy word soup we just created, we need to clean it up.  I'm going to carry out a number of operations on our corpus object below, and I'm going to use `tm_map()` to apply each function to `docs`.  Again, in this case we only have the one document so this isn't very impressive, but you can imagine this being very efficient and elegant if I was carrying out these manipulations on thousands of web-scraped facebook posts or tweets.  I think it's pretty self explanatory what I'm doing in each cleaning/transformation step below, but I've included some comments just in case.
+
+```{r warning=FALSE, message=FALSE}
+#replace some characters with spaces
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+docs <- tm_map(docs, toSpace, "<") 
+docs <- tm_map(docs, toSpace, ">") 
+docs <- tm_map(docs, toSpace, "-")
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove numbers
+docs <- tm_map(docs, removeNumbers)
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+# Remove punctuations
+docs <- tm_map(docs, removePunctuation)
+# Eliminate extra white spaces
+docs <- tm_map(docs, stripWhitespace)
+```
+
+## Generate Term-Document Matrix
+
+Now we need to take our cleaned corpus object and generate a table of terms and their corresponding frequencies.  To do this I'll use `TermDocumentMatrix()` from the `tm` package.  I'll then arrange by frequency and convert to a tibble so we can take a look.  I'll print the top 10 rows to the console for inspection.
+
+```{r warning=FALSE, message=FALSE}
+v <- TermDocumentMatrix(docs) %>%
+  as.matrix() %>%
+  rowSums() %>%
+  sort(decreasing = TRUE)
+termsDF <- tibble(word = names(v),freq=v)
+termsDF %>% slice(1:10)
+```
+
+Alright, that looks pretty good.  I didn't expect to see "inquiry" at the top but what do I know?  One thing I notice right away is that I have two versions of the word assault contained here: "assault" at #7 and "asslt" at #8.  I think it's important we combine these two as this is clearly a frequently used term, so I'm going to add one more step to our cleaning/transformation step and regenerate our frequency table.
+
+```{r warning=FALSE, message=FALSE}
+# replace asslt with assault
+docs <- tm_map(docs, str_replace_all, "asslt", "assault")
+v <- TermDocumentMatrix(docs) %>%
+  as.matrix() %>%
+  rowSums() %>%
+  sort(decreasing = TRUE)
+termsDF <- tibble(word = names(v),freq=v)
+termsDF %>% slice(1:10)
+```
+
+Ok, that looks much better now.  There are probably more abbreviations to be combined in this dataset, but that's the only one I see in the top 10.  If I notice more later, I'll fix them as they come up.  Now let's move on to making the word cloud.
+
+# Word Cloud
+
+To generate the word cloud, I'm going to use `wordcloud()` from the `wordcloud` package, fittingly.  We simply need to supply the terms and corresponding frequencies, along with a couple other parameters to fine tune the output.  I'm also choosing a color palette from the [`ggsci`](https://github.com/nanxstats/ggsci) package as I think they have some very professional looking palettes. 
+
+``` {r message=FALSE, warning=FALSE, fig.width=4, fig.height=4}
+library(wordcloud)
+wordcloud(
+  words = termsDF$word, freq = termsDF$freq, min.freq = 5,
+  max.words=100, random.order=FALSE, rot.per=0.35, 
+  colors=ggsci::pal_jama()(10)
+)
+```
+
+Ok, that looks pretty good!  I think I'll move forward with this word cloud and integrate into the Shiny app.
+
+# Conclusions
+
+In conclusion we accomplished the following in this post:
+
+1. Used some light text mining to summarize the offense description field of our crime dataset.
+2. Generated a wordcloud to visualize the text information.
+
+The next step is to integrate all of the analyses and visuals from Parts 1-3 of this series into a Shiny app and host it on a publicly available server.  This is probably the hardest part of the entire process but I'm up for the challenge.
