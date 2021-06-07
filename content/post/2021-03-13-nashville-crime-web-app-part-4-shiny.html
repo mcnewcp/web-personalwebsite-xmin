@@ -1,0 +1,274 @@
+---
+title: 'Nashville Crime Web App Part 4: Shiny'
+author: Coy McNew
+date: '2021-03-13'
+slug: nashville-crime-web-app-part-4-shiny
+output:
+  blogdown::html_page:
+    toc: true
+    number_sections: true
+categories:
+  - Nashville Crime Web App
+tags:
+  - geospatial
+  - sf
+  - mapdeck
+  - SQL
+  - HTML
+draft: TRUE
+---
+
+
+<div id="TOC">
+<ul>
+<li><a href="#objective"><span class="toc-section-number">1</span> Objective</a></li>
+<li><a href="#shiny-overview"><span class="toc-section-number">2</span> Shiny Overview</a></li>
+<li><a href="#global.r"><span class="toc-section-number">3</span> global.R</a><ul>
+<li><a href="#connecting-to-dataset"><span class="toc-section-number">3.1</span> Connecting to Dataset</a></li>
+<li><a href="#polygon-data"><span class="toc-section-number">3.2</span> Polygon Data</a></li>
+</ul></li>
+<li><a href="#server.r"><span class="toc-section-number">4</span> server.R</a><ul>
+<li><a href="#prep-data"><span class="toc-section-number">4.1</span> Prep Data</a></li>
+<li><a href="#aggregate-spatial-data"><span class="toc-section-number">4.2</span> Aggregate Spatial Data</a></li>
+<li><a href="#generate-interactive-map"><span class="toc-section-number">4.3</span> Generate Interactive Map</a></li>
+</ul></li>
+<li><a href="#ui.r"><span class="toc-section-number">5</span> ui.R</a></li>
+<li><a href="#conclusion"><span class="toc-section-number">6</span> Conclusion</a></li>
+</ul>
+</div>
+
+<div id="objective" class="section level1">
+<h1><span class="header-section-number">1</span> Objective</h1>
+<p>The objective of this series of posts is to catalog my effort on a project which accomplishes the following, now simplified, objectives:</p>
+<ol style="list-style-type: decimal">
+<li>Connect directly to publicly available data from <a href="https://data.nashville.gov">data.nashville.gov</a></li>
+<li>Summarize the information in an interactive map</li>
+<li>Allow the user to intuitively investigate the data</li>
+<li>Run as a Shiny web app, hosted on <a href="shinyapps.io">shinyapps.io</a> for anyone to use</li>
+</ol>
+<p>In this post I’m using <a href="https://shiny.rstudio.com/"><code>Shiny</code></a> to build a UI for the tools and visuals I’ve developed in parts 1-3 of this series. This also allows me to host the whole thing as a web app, for anyone to freely use. It’s really cool stuff.</p>
+<p>While playing around with possible versions of this tool, I realized simpler is likely better if my aim is for anyone to use this web app. My most successful efforts in this space tend to follow the “less is more” design aesthetic. Because of this, my final version is going to be built mainly around a clean and usable interactive map with options for aggregation.</p>
+</div>
+<div id="shiny-overview" class="section level1">
+<h1><span class="header-section-number">2</span> Shiny Overview</h1>
+<p>I’m not going to attempt to write a guide on how to use Shiny as there are already plenty of excellent examples out there, including the <a href="https://shiny.rstudio.com/tutorial/">official tutorial</a> from RStudio and of course the excellent <a href="https://shiny.rstudio.com/images/shiny-cheatsheet.pdf">Shiny cheat sheet</a>, which I have in hard copy on my desk and I reference nearly every time I begin a Shiny app. Instead, I’m going to focus mainly on overall layout and how I’ve transformed content from the previous parts of this series. The Shiny app is broken up into three scripts:</p>
+<ul>
+<li>global.R - contains all functions and content that I want to make available to the app</li>
+<li>server.R - contains instructions on how to build and rebuild the R objects displayed in the UI</li>
+<li>ui.R - nested R functions that assemble HTML user interface for interacting with the app</li>
+</ul>
+<p>I’ll briefly cover what I’ve included in each of these scripts below.</p>
+</div>
+<div id="global.r" class="section level1">
+<h1><span class="header-section-number">3</span> global.R</h1>
+<p>Aside from loading all required packages, I’m including 3 components in this script:</p>
+<ol style="list-style-type: decimal">
+<li>expression to load max date from the live database</li>
+<li>function to load requested data from live database</li>
+<li>load polygons for spatial aggregation</li>
+</ol>
+<div id="connecting-to-dataset" class="section level2">
+<h2><span class="header-section-number">3.1</span> Connecting to Dataset</h2>
+<p>I’ve discussed the method to connect to the Socrata database in detail in <a href="https://www.coymcnew.com/post/2020/09/08/nashville-crime-web-app-part-1-getting-the-data/">Part 1</a> and <a href="https://www.coymcnew.com/post/2020/10/10/nashville-crime-web-app-part-2-5-time-series-visual/">Part 2.5</a> of this series. The API uses some pseudo SQL to query the database as desired. First, I’m going to simply pull the date of the most recent observation from the database, in order to use it in a UI element later.</p>
+<pre class="r"><code>library(RSocrata)
+library(tidyverse)
+library(lubridate)
+#pull max date
+max_date &lt;- read.socrata(
+  &quot;https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &amp;$limit=10&quot;,
+  #in the hosted version, I use the associated app token here
+  #app_token = app_token
+) %&gt;%
+  pull(incident_occurred) %&gt;%
+  max(na.rm=TRUE) %&gt;%
+  date()</code></pre>
+<p>Next I’m including a function which will make it much simpler to query the database each time the user changes the date range requested. This function receives start and end dates and returns the raw dataset from the Socrata API.</p>
+<pre class="r"><code>#function to connect to database
+get_data &lt;- function(start_date, end_date) {
+  #pull n most recent weeks of data
+  start_dt &lt;- ymd_hms(paste(start_date, &quot;00:00:00&quot;))
+  end_dt &lt;- ymd_hms(paste(end_date, &quot;23:59:59&quot;))
+  read.socrata(
+    paste0(
+      &quot;https://data.nashville.gov/resource/2u6v-ujjs.csv?$order=incident_occurred DESC &amp;$where=incident_occurred &gt;=&quot;, 
+      &quot;&#39;&quot;, format.POSIXct(start_dt, format = &quot;%Y-%m-%dT%H:%M:%S&quot;), &quot;&#39; AND incident_occurred &lt;&quot;, 
+      &quot;&#39;&quot;, format.POSIXct(end_dt, format = &quot;%Y-%m-%dT%H:%M:%S&quot;), &quot;&#39;&quot;
+    )
+    #in the hosted version, I use the associated app token here
+    #app_token = app_token
+  )
+}</code></pre>
+</div>
+<div id="polygon-data" class="section level2">
+<h2><span class="header-section-number">3.2</span> Polygon Data</h2>
+<p>Also in <strong>global.R</strong> I’m loading some polygons for aggregating the crime data. These polygons are census tracts, block groups, and voting districts for Davidson County. I’ve pulled these polygons direct via API using the <a href="https://github.com/walkerke/tigris"><code>tigris</code></a> package. I’ve trimmed the polygons down to just the relevant data and hosted in a <a href="https://github.com/mcnewcp/Nashville-census-tracts">github repo</a> in order to speed up loading of the web app.</p>
+<pre class="r"><code>library(sf)
+#load Nashville census polygon data
+polyLS &lt;- readRDS(gzcon(url(&quot;https://github.com/mcnewcp/Nashville-census-tracts/blob/master/Nashville_Census_Polygons_2019.RDS?raw=true&quot;)))</code></pre>
+</div>
+</div>
+<div id="server.r" class="section level1">
+<h1><span class="header-section-number">4</span> server.R</h1>
+<p>The server script does most of the heavy lifting for the app, as it generates all outputs as the dynamically user defined inputs change. In this script, I’m accomplishing three main tasks:</p>
+<ol style="list-style-type: decimal">
+<li>Load and prep data</li>
+<li>Aggregate data to prep 3D polygons</li>
+<li>Generate dynamic mapdeck map</li>
+</ol>
+<div id="prep-data" class="section level2">
+<h2><span class="header-section-number">4.1</span> Prep Data</h2>
+<p>First, I’m going to load the main data object. This needs to be a reactive object, so whenever the user defined date range changes, the data object will change in turn and all other objects dependant on it will also update. In this case I’m using <code>isolate()</code> inside the reactive context so that this object will only change when the user clicks the download button, which we’ll be including in the UI.</p>
+<p>In addition, I’m doing some basic data cleaning, turning into an <a href="https://r-spatial.github.io/sf/"><code>sf</code></a> object, and generating a column containing a simple html tooltip.</p>
+<pre class="r"><code>library(shiny)
+#load dataset
+dataSF &lt;- reactive({
+  #only update on button press
+  input$download_button
+  isolate({
+    withProgress({
+      setProgress(message = &quot;Connecting to live data...&quot;)
+      get_data(input$daterange[1], input$daterange[2], app_token) %&gt;%
+        #drop blank coords
+        filter(!is.na(longitude) | !is.na(latitude)) %&gt;%
+        #drop coord errors (i.e. coords way outside of Nashville)
+        filter(latitude &gt; 35 &amp; latitude &lt; 36.7) %&gt;%
+        filter(longitude &gt; -87.7 &amp; longitude &lt; -85.7) %&gt;%
+        #one entry per datetime per lat/lon
+        distinct(incident_occurred, latitude, longitude, .keep_all = TRUE) %&gt;%
+        #make sf object
+        st_as_sf(coords = c(&quot;longitude&quot;, &quot;latitude&quot;), crs = 4326) %&gt;%
+        #make tooltip
+        mutate(tooltip = paste(incident_occurred, &quot;&lt;br/&gt;&quot;, offense_description))
+    })
+  })
+})</code></pre>
+</div>
+<div id="aggregate-spatial-data" class="section level2">
+<h2><span class="header-section-number">4.2</span> Aggregate Spatial Data</h2>
+<p>Next, I’m taking the data object I loaded earlier and aggregating to the polygons loaded in <code>global.R</code>. Which group of polygons I’m using for aggregation is a user defined selection stored in <code>input$agg_select</code>. This chunk uses the function <code>sf::st_intersects()</code> to count how many of the crime data points are contained within each polygon. The <code>sf</code> package makes non-trivial spatial calculations like this very simple and intuitive. I really love this package.</p>
+<p>The resulting aggregated crime data is then stored in a reactive, <code>sf</code> object for use in the map alongside the individual point data. Each row of this object is a polygon with corresponding crime totals and a simple html tooltip. The <code>sf</code> package makes working with polygon data as simple as working with a normal dataframe. Have I mentioned how much I like this package?</p>
+<pre class="r"><code>#generate aggregated SF
+aggSF &lt;- reactive({
+  if (input$agg_select == &quot;Census Tract&quot;) {
+    polyLS$tract %&gt;%
+      st_set_crs(4326) %&gt;%
+      #count points in each polygon
+      mutate(incidents = lengths(st_intersects(., dataSF()))) %&gt;%
+      #make tooltip
+      mutate(tooltip = paste(name, &quot;&lt;br/&gt;Incident Count:&quot;, incidents))
+  } else if (input$agg_select == &quot;Census Block Group&quot;) {
+    polyLS$block_group %&gt;%
+      st_set_crs(4326) %&gt;%
+      #count points in each polygon
+      mutate(incidents = lengths(st_intersects(., dataSF()))) %&gt;%
+      #make tooltip
+      mutate(tooltip = paste(name, &quot;&lt;br/&gt;Incident Count:&quot;, incidents))
+  } else {
+    polyLS$voting_district %&gt;%
+      st_set_crs(4326) %&gt;%
+      #count points in each polygon
+      mutate(incidents = lengths(st_intersects(., dataSF()))) %&gt;%
+      #make tooltip
+      mutate(tooltip = paste(name, &quot;&lt;br/&gt;Incident Count:&quot;, incidents))
+  }
+})</code></pre>
+</div>
+<div id="generate-interactive-map" class="section level2">
+<h2><span class="header-section-number">4.3</span> Generate Interactive Map</h2>
+<p>I’m using the <a href="https://symbolixau.github.io/mapdeck/articles/mapdeck.html"><code>mapdeck</code></a> package to build the map for this app. It’s a relatively new R package which makes <a href="https://docs.mapbox.com/help/glossary/mapbox-gl/">Mapbox</a> and <a href="https://deck.gl/#/">Deck.gl</a> available inside the R environment. I think it’s really slick and snappy. It requires you to use a key to pull map data from the mapdeck API. I’ve registered a key for this app and I’m calling it <code>mapdeck_key</code> below.</p>
+<p>There are two steps required here, first I set up the map and extent, then in a separate second step I update the map by adding the user selected data. By splitting the data updates from the map creation, I avoid two main issues: 1) the map extent and zoom does not reset each time the data is altered and 2) the map does not redraw each time the data is altered. Both of these issues can really take the user out of the experience.</p>
+<p>By wrapping the map update with <code>observe({})</code>, I’m telling the server side to watch any dynamic elements contained within this chunk and re-run the entire chunk whenever any are changed. It’s analogous to <code>reactive({})</code> which I used earlier, except that it’s not used to create a reactive object, but rather simply watch a code chunk for changes and update accordingly. It’s also important to note that I used <code>clear_polygon()</code>, <code>clear_heatmap()</code>, and <code>clear_scatterplot()</code> to clear unwanted layers during each step, otherwise each additional layer is drawn right on top and they pile up. I’m not going to cover specifics of the <code>mapdeck</code> package here, see the <a href="https://symbolixau.github.io/mapdeck/articles/mapdeck.html">excellent tutorial</a> which sums it up far better than I could hope to.</p>
+<pre class="r"><code>library(mapdeck)
+#generate map
+output$map &lt;- renderMapdeck({
+  mapdeck(
+    token = mapdeck_key, style = mapdeck_style(&#39;dark&#39;), pitch = 45,
+    location = c(-86.77644756173848, 36.164626527074354), zoom = 9.5
+  )
+})
+#update map layer(s)
+observe({
+  if (input$map_select == &quot;Individual Points&quot;) {
+    mapdeck_update(map_id = &quot;map&quot;) %&gt;%
+      clear_polygon(layer_id = &quot;agglayer&quot;) %&gt;%
+      add_heatmap(
+        data = dataSF(),
+        layer_id = &quot;heatlayer&quot;,
+        update_view = FALSE
+      ) %&gt;%
+      add_scatterplot(
+        data = dataSF(),
+        layer_id = &quot;pointlayer&quot;,
+        fill_colour = &quot;#FFFFFF&quot;, 
+        radius = 25,
+        tooltip = &quot;tooltip&quot;,
+        update_view = FALSE,
+        auto_highlight = TRUE
+      )
+  } else {
+    mapdeck_update(map_id = &quot;map&quot;) %&gt;%
+      clear_heatmap(&quot;heatlayer&quot;) %&gt;%
+      clear_scatterplot(&quot;pointlayer&quot;) %&gt;%
+      add_polygon(
+        data = aggSF(),
+        layer_id = &quot;agglayer&quot;,
+        fill_colour = &quot;incidents&quot;, fill_opacity = layer_opacity(),
+        elevation = &quot;incidents&quot;, elevation_scale = input$height,
+        tooltip = &quot;tooltip&quot;,
+        update_view = FALSE,
+        auto_highlight = TRUE
+      ) 
+  }
+})</code></pre>
+</div>
+</div>
+<div id="ui.r" class="section level1">
+<h1><span class="header-section-number">5</span> ui.R</h1>
+<p>The UI script generates all html required to organize and dsiplay all inputs and outputs. If you’re handy in html and/or css, this script can be endlessly customized to your heart’s content. I’ve kept things pretty simple here, using entirely built in functions. I’ve split the page into two panels, a sidebar that holds all user inputs and a big main panel to house our interactive map, the star of the show.</p>
+<p>I’m not really going to go into any further detail about how the UI works here, but I’ve included the UI script below in it’s entirety as it’s pretty short and to the point.</p>
+<pre class="r"><code>fluidPage(theme = shinytheme(&quot;darkly&quot;), title = &quot;Nashville Crime Data Map&quot;, 
+  titlePanel(&quot;Nashville Crime Data Map&quot;),
+  sidebarLayout(
+    sidebarPanel(
+      dateRangeInput(
+        &quot;daterange&quot;, &quot;Select Date Range&quot;, 
+        start = max_date - days(7), end = max_date, format = &quot;mm/dd/yy&quot;,
+        max = max_date
+      ),
+      actionButton(&quot;download_button&quot;, &quot;Connect to Live Data!&quot;),
+      tagList(br(), br(), &quot;Live data loaded from: &quot;, a(&quot;data.nashville.gov&quot;, href=&quot;https://data.nashville.gov/Police/Metro-Nashville-Police-Department-Incidents/2u6v-ujjs&quot;)),
+      hr(),
+      radioButtons(
+        &quot;map_select&quot;, &quot;Choose Map View&quot;,
+        choices = c(&quot;Individual Points&quot;, &quot;Aggregated Polygons&quot;),
+        selected = &quot;Individual Points&quot;
+      ),
+      conditionalPanel(
+        condition = &quot;input.map_select == &#39;Aggregated Polygons&#39;&quot;,
+        radioButtons(
+          &quot;agg_select&quot;, &quot;Aggregate points by:&quot;,
+          choices = c(&quot;Census Tract&quot;, &quot;Census Block Group&quot;, &quot;Voting District&quot;),
+          selected = &quot;Census Tract&quot;
+        ),
+        sliderInput(&quot;opacity&quot;, &quot;Choose Layer Opacity&quot;, min = 0, max = 1, value = 1, step = 0.05),
+        sliderInput(&quot;height&quot;, &quot;Choose Layer Elevation Multiplier&quot;, min = 0, max = 100, value = 50, step = 1)
+      ),
+      
+    ),
+    mainPanel(
+      mapdeckOutput(&quot;map&quot;, height = &#39;800px&#39;),
+      h5(&quot;right click + drag to change perspective&quot;),
+      h5(&quot;left click + drag to pan&quot;),
+      h5(&quot;mouse wheel to zoom&quot;),
+      h5(&quot;hover points for details&quot;)
+      
+      # verbatimTextOutput(&quot;debug&quot;)
+    )
+  )
+)</code></pre>
+</div>
+<div id="conclusion" class="section level1">
+<h1><span class="header-section-number">6</span> Conclusion</h1>
+<p>The resulting Shiny app is hosted <a href="https://mcnewcp.shinyapps.io/nashville-crime-map/">here</a>. It’s simple, clean, easy to use and I think it does a pretty decent job accomplishing the objectives I defined at the beginning of this series. I’m calling this project a success and moving on! I may even plug this one on LinkedIn.</p>
+<p><img src="https://media.giphy.com/media/WmkqburJqXziM/giphy.gif" /></p>
+</div>
