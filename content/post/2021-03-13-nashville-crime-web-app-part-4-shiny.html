@@ -37,6 +37,7 @@ draft: TRUE
 </ul>
 </div>
 
+<p><img src="https://media.giphy.com/media/vwIzAAZpl5eKbIdUoo/giphy.gif" /></p>
 <div id="objective" class="section level1">
 <h1><span class="header-section-number">1</span> Objective</h1>
 <p>The objective of this series of posts is to catalog my effort on a project which accomplishes the following, now simplified, objectives:</p>
@@ -145,6 +146,7 @@ dataSF &lt;- reactive({
 </div>
 <div id="aggregate-spatial-data" class="section level2">
 <h2><span class="header-section-number">4.2</span> Aggregate Spatial Data</h2>
+<p><img src="https://media.giphy.com/media/jx9FFK3ZdK7l1OoH8N/giphy.gif" /></p>
 <p>Next, I’m taking the data object I loaded earlier and aggregating to the polygons loaded in <code>global.R</code>. Which group of polygons I’m using for aggregation is a user defined selection stored in <code>input$agg_select</code>. This chunk uses the function <code>sf::st_intersects()</code> to count how many of the crime data points are contained within each polygon. The <code>sf</code> package makes non-trivial spatial calculations like this very simple and intuitive. I really love this package.</p>
 <p>The resulting aggregated crime data is then stored in a reactive, <code>sf</code> object for use in the map alongside the individual point data. Each row of this object is a polygon with corresponding crime totals and a simple html tooltip. The <code>sf</code> package makes working with polygon data as simple as working with a normal dataframe. Have I mentioned how much I like this package?</p>
 <pre class="r"><code>#generate aggregated SF

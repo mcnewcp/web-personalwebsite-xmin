@@ -18,6 +18,8 @@ tags:
 draft: TRUE
 ---
 
+![](https://media.giphy.com/media/vwIzAAZpl5eKbIdUoo/giphy.gif)
+
 # Objective
 
 The objective of this series of posts is to catalog my effort on a project which accomplishes the following, now simplified, objectives:
@@ -139,6 +141,8 @@ dataSF <- reactive({
 ```
 
 ## Aggregate Spatial Data
+
+![](https://media.giphy.com/media/jx9FFK3ZdK7l1OoH8N/giphy.gif)
 
 Next, I'm taking the data object I loaded earlier and aggregating to the polygons loaded in `global.R`.  Which group of polygons I'm using for aggregation is a user defined selection stored in `input$agg_select`.  This chunk uses the function `sf::st_intersects()` to count how many of the crime data points are contained within each polygon.  The `sf` package makes non-trivial spatial calculations like this very simple and intuitive.  I really love this package.
 
