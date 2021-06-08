@@ -16,8 +16,7 @@ tags:
   - SQL
   - HTML
 ---
-
-![](https://media.giphy.com/media/vwIzAAZpl5eKbIdUoo/giphy.gif)
+![](/post/2021-03-13-nashville-crime-web-app-part-4-shiny_files/nashville-crime-data-map_2021-06-08.gif)
 
 # Objective
 
