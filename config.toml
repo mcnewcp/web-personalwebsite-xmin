@@ -37,7 +37,7 @@ footnotereturnlinkcontents = "↩"
 
 [params]
     description = "A website built through Hugo and blogdown."
-    footer = "&copy; [Coy McNew](https://www.coymcnew.com) 2020 -- 2020 | [Github](https://github.com/mcnewcp)"
+    footer = "&copy; [Coy McNew](https://www.coymcnew.com) 2020 -- 2021 | [Github](https://github.com/mcnewcp)"
 
 [markup]
   [markup.goldmark]
