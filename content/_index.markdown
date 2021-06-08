@@ -8,8 +8,8 @@ title: Home
 
 This website is a tool for me to explore, experiment, and catalog.  It will serve as place to collect my thoughts, record my challenges, and perhaps even showcase or self promote if I end up making anything worth sharing.
 
+![](https://media.giphy.com/media/HK4ientkoZxzTZvsbw/giphy.gif)
 
-![](https://i.imgur.com/UKrBzCv.gifv)
 
 
 
