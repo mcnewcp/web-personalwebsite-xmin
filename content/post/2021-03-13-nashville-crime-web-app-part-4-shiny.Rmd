@@ -15,7 +15,6 @@ tags:
   - mapdeck
   - SQL
   - HTML
-draft: TRUE
 ---
 
 ![](https://media.giphy.com/media/vwIzAAZpl5eKbIdUoo/giphy.gif)
