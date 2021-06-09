@@ -1,0 +1,267 @@
+---
+title: 'Mortgage Refinance Calculator Part 1: Calculations'
+author: Coy McNew
+date: '2021-06-08'
+slug: mortgage-refinance-calculator-part-1-calculations
+categories:
+  - Mortgage Refinance Calculator
+tags:
+  - plotly
+  - tidyverse
+  - finance
+
+---
+
+# Objective
+
+As mortgage interest rates [continued to decline](https://themortgagereports.com/61853/30-year-mortgage-rates-chart) through early 2021, I decided to see how much we could save by refinancing.  Since I knew I would be shopping around from different sources who offer different rates, closing costs, points, etc. I thought this would be a good time to crank out another [`Shiny`](https://shiny.rstudio.com/) tool.  The objectives of this tool were as follows:
+
+1. Calculate costs of refinanced mortgage as compared to current mortgage for any user-supplied values.
+2. Display simple summaries of the above information in an interactive, investigable format.
+3. Convince my wife that it was time to refinance our home.
+
+Objective #3 was really my main goal here.  Pretty much as soon as I started looking I realized we should pull the trigger, which just left her to be convinced.  
+
+In this post I'm going to go over the calculations I built into the app.  In the next post, I'll go over the visuals I generated with those results and in the final post of this series I'll summarize the Shiny app layout.
+
+# Amortization
+
+The only real financial calculation standing in my way was amortization, or the calculation of monthly payment amount given an interest rate, principal, and length of loan.  There are a number of R packages that deal with financial calculations, including some that have built in amortization functions but I wanted to understand what was going on here so I went ahead and pulled the equation from [wikipedia](https://en.wikipedia.org/wiki/Amortization_calculator):
+
+$$M =  \frac{P * r}{(1 - (1 + r)^{-n})}$$
+
+where: 
+
+ - $M$ = monthly payment
+ - $P$ = loan principal
+ - $r$ = monthly interest rate, (note: this is the APR/12 months)
+ - $n$ = total number of payments (months)
+ 
+This is easy enough to implement in R.  I'll check with some reasonable values, say $300,000 principal, 30 year term, 4.0% APR.
+
+```{r warning=FALSE, message=FALSE}
+P <- 300000
+r <- 4/100/12
+n <- 30*12
+M = (P*r)/(1-(1+r)^(-n))
+M
+```
+
+That is exactly what I get when I check against a published [amortization calculator](https://www.bankrate.com/calculators/mortgages/amortization-calculator.aspx), so I think I'm good to go.  
+
+# Monthly Comparison
+
+As I think through my desired data structure for summary visuals, these are the measures I want to calculate for each month:
+
+1. Monthly Principal - how much of my monthly payment went towards principal?
+2. Total Principal - how much have I paid towards principal in total?
+3. Monthly Interest - how much of my monthly payment went towards interest?
+4. Total Interest - how much have I paid towards interest in total?
+3. Ending Balance - how much do I still owe?
+4. Total Paid - how much have I paid in total?
+
+My resulting dataframe should then be a time series with a row for every month throughout the life of the loan and a column for each of the above measures.  I'll need to generate one for the original mortgage and one for the refinanced mortgage.
+
+## Original Mortgage
+
+First, I need to calculate how much interest and principal I'm paying in the first month.  It turns out calculating the monthly interest is as easy as multiplying the outstanding principal by the monthly interest rate.  Then, the amount of my monthly payment which goes towards principal is simply my monthly payment ($M$) minus my monthly paid towards interest ($mI$).  And finally to calculate the amount of principal remaining at the end of the month, I simply subtract the amount I paid in principal ($mP$) from the outstanding principal at the beginning of the month.
+
+```{r warning=FALSE, message=FALSE}
+#monthly interest
+mI <- P*r
+#monthly principal
+mP <- M - mI
+#end of month loan balance
+iP <- P - mP
+
+cat(paste(
+  "Monthly Interest Paid =", mI,
+  "\nMonthly Principal Paid =", mP,
+  "\nEnd of Month Loan Balance =", iP
+))
+```
+
+Ok, easy enough, but that was just for the first month.  Now I'm going to extend it for each month throughout the life of the loan.  There is likely an elegant, vectorized solution to this but since it's not an intensive calculation I'm going to handle it in a good old fashioned for loop!  I'm looping through each month of the life of the loan, so `for i in 1:n`.  Since the above calculations change with each month, and therefore each loop, I have to initialize them outside of the loop and then update inside the loop.  I'm also initializing a dataframe to store the values and then adding a row in each loop.
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+library(lubridate)
+
+#initialize vars
+origDF <- tibble()
+iP <- P
+iP_paid <- 0
+iI_paid <- 0
+itotal_paid <- 0
+#start time series at 2019-06-01
+it <- ymd("2019-06-01")
+
+#loop through months and generate time series dataframe
+for (i in 1:n) {
+  #monthly interest
+  mI <- iP * r
+  #monthly principal
+  mP <- M - mI
+  #ending loan balance
+  iP <- iP - mP
+  #data rows
+  iDF <- tibble(
+    date = it, payment = M, 
+    principal_payment = mP, interest_payment = mI,
+    ending_balance = iP,
+    principal_paid = iP_paid + mP,
+    interest_paid = iI_paid + mI,
+    total_paid = itotal_paid + mP + mI
+  )
+  origDF <- origDF %>% bind_rows(iDF)
+  #update vars
+  it <- it + months(1)
+  iP_paid <- iP_paid + mP
+  iI_paid <- iI_paid + mI
+  itotal_paid <- itotal_paid + mP  + mI
+}
+
+str(origDF)
+```
+
+And there we have it - the dataframe I was looking for, including all column variables I defined above and a row for each month of the loan.
+
+## Refinanced Mortgage
+
+Before generating the same results for the refinanced mortgage, I need to determine a few values first.  For starters, the principal will be different, since the refinanced mortgage will take over where the original mortgage left off and so I'll need to pull that from the `ending_balance` column of `origDF`.  Similarly, my initialized values of `iP_paid`, `iI_paid`, and `itotal_paid` are no longer zero since I've already paid towards the original loan.  Below, I'm going to assume I found a good deal on a refinance and my rate dropped to 2.5%.  I'm keeping the same 30 year term and the new refinance is set to take over a little over 2 years after the original mortgage started, 2021-07-01.  I'm also going to calculate my new monthly payment.
+
+
+```{r warning=FALSE, message=FALSE}
+#refinance mortgage start date
+t0 <- ymd("2021-07-01")
+
+#derive principal from origDF
+P <- origDF %>%
+  filter(date == t0 - months(1)) %>%
+  pull(ending_balance)
+
+#derive prinicpal paid from origDF
+P0 <- origDF %>%
+  filter(date == t0 - months(1)) %>%
+  pull(principal_paid)
+#derive  interest paid from origDF
+I0 <- origDF %>%
+  filter(date == t0 - months(1)) %>%
+  pull(interest_paid)
+
+#monthly interest rate
+r <- 2.5/100/12
+#monthly payment
+M <- P * r / (1 - (1 + r)^(-n))
+```
+
+Now before I generate `refiDF` using these new values for the refinanced mortgage, I need to introduce one final issue.  In order to get a complete picture of the financial comparison, I need to take into account all up-front, one time costs.  Closing costs are straight-forward, they're simply the expenses you pay for the services of the lending bank during the transaction.  Mortgage points are fees paid directly to the lender at closing in exchange for a reduced interest rate.  In some cases the bank will require you to pay a set amount of points up front and in some cases they will give you an option to pay points to reduce the interest rate.  I'm going to pull points out as a separate input so the user can tinker and get a good feel for how they affect the resulting refinanced mortgage.  Points are calculated as a percentage of the total principal, so I'll simply multiply points by the refinance principal derived above.  
+
+```{r message=FALSE, warning=FALSE}
+#up-front closing costs
+close_cost <- 4000
+#points to be paid up front
+points <- 2
+
+#sum up all additional costs
+add_costs <- close_cost + points/100*P
+```
+
+Now I will initialize my refinance values using all the variables I derived above and generate `refiDF` with the same for loop I used previously.
+
+```{r message=FALSE, warning=FALSE}
+
+#initialize using refinance values
+refiDF <- tibble()
+iP <- P
+iP_paid <- P0
+iI_paid <- I0
+it <- t0
+itotal_paid <- add_costs + P0 + I0
+#loop through months and generate time series  
+for (i in 1:n) {
+  #monthly interest
+  mI <- iP * r
+  #monthly principal
+  mP <- M - mI
+  #ending loan balance
+  iP <- iP - mP
+  #data rows
+  iDF <- tibble(
+    date = it, payment = M, 
+    principal_payment = mP, interest_payment = mI,
+    ending_balance = iP,
+    principal_paid = iP_paid + mP,
+    interest_paid = iI_paid + mI,
+    total_paid = itotal_paid + mP + mI
+  )
+  refiDF <- refiDF %>% bind_rows(iDF)
+  it <- it + months(1)
+  iP_paid <- iP_paid + mP
+  iI_paid <- iI_paid + mI
+  itotal_paid <- itotal_paid + mP  + mI
+}
+
+str(refiDF)
+```
+
+# Conclusion
+
+That's it!  I've calculated everything I need to analyze this problem in detail.  Now it's time to move on to the fun part, making the visuals.  I'll cover that in the next post.  Sneak peek below - it looks like I'm going to save a ton in interest, even with those hefty up-front costs.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(plotly)
+library(ggsci)
+
+#running total plot
+cols <- pal_jco()(5)
+
+plot_ly() %>%
+  add_trace(data = origDF,
+            x = ~date, y = ~ending_balance,
+            name = "Balance",
+            line = list(color = cols[1]),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  add_trace(data = origDF,
+            x = ~date, y = ~principal_paid,
+            name = "Principal Paid",
+            line = list(color = cols[2]),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  add_trace(data = origDF,
+            x = ~date, y = ~interest_paid,
+            name = "Interest Paid",
+            line = list(color = cols[3]),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  add_trace(data = refiDF,
+            x = ~date, y = ~ending_balance,
+            name = "Balance",
+            line = list(color = cols[1], dash = "dot"),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  add_trace(data = refiDF,
+            x = ~date, y = ~principal_paid,
+            name = "Principal Paid", 
+            line = list(color = cols[2], dash = "dot"),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  add_trace(data = refiDF,
+            x = ~date, y = ~interest_paid,
+            name = "Interest Paid", 
+            line = list(color = cols[3], dash = "dot"),
+            type = 'scatter', mode = 'lines'
+  ) %>%
+  layout(
+    hovermode = "x unified", showlegend = FALSE,
+    xaxis = list(title = "Date"), yaxis = list(title = "Running Total ($)")
+  ) %>%
+  add_annotations(
+        x= 0.5, y= 1,
+        xref = "paper", yref = "paper",
+        text = "Solid lines = original mortgage, dotted lines = refinanced",
+        showarrow = F
+      )
+
+```
