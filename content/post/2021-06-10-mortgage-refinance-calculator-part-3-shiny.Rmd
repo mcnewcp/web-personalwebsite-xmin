@@ -1,0 +1,172 @@
+---
+title: 'Mortgage Refinance Calculator Part 3: Shiny'
+author: Coy McNew
+date: '2021-06-10'
+slug: mortgage-refinance-calculator-part-3-shiny
+output:
+  blogdown::html_page:
+    toc: true
+    number_sections: true
+categories:
+  - Mortgage Refinance Calculator
+tags:
+  - shiny
+  - html
+  - scales
+draft: TRUE
+---
+
+
+# Objective
+
+As mortgage interest rates [continued to decline](https://themortgagereports.com/61853/30-year-mortgage-rates-chart) through early 2021, I decided to see how much we could save by refinancing.  Since I knew I would be shopping around from different sources who offer different rates, closing costs, points, etc. I thought this would be a good time to crank out another [`Shiny`](https://shiny.rstudio.com/) tool.  The objectives of this tool were as follows:
+
+1. Calculate costs of refinanced mortgage as compared to current mortgage for any user-supplied values.
+2. Display simple summaries of the above information in an interactive, investigable format.
+3. Convince my wife that it was time to refinance our home.
+
+I covered the calculations in [Part 1](https://www.coymcnew.com/post/2021/06/08/mortgage-refinance-calculator-part-1-calculations/) and the visuals in [Part 2](https://www.coymcnew.com/post/2021/06/09/mortgage-refinance-calculator-part-2-visuals/), so I'll wrap up this tool here by covering how I'm packaging this up into a Shiny app.
+
+# Shiny Overview
+
+I'm not going to attempt to write a guide on how to use Shiny as there are already plenty of excellent examples out there, including the [official tutorial](https://shiny.rstudio.com/tutorial/) from RStudio and of course the excellent [Shiny cheat sheet](https://shiny.rstudio.com/images/shiny-cheatsheet.pdf), which I have in hard copy on my desk and I reference nearly every time I begin a Shiny app.  Instead, I'm going to focus mainly on overall layout and how I've transformed content from the previous parts of this series.  The Shiny app is broken up into three scripts:
+
+  - global.R - contains all functions and content that I want to make available to the app
+  - server.R - contains instructions on how to build and rebuild the R objects displayed in the UI
+  - ui.R - nested R functions that assemble HTML user interface for interacting with the app
+  
+I'll briefly cover what I've included in each of these scripts below.
+
+# global.R
+
+Aside from loading all required packages, I'm including a function here to summarize all calculations needed.  It takes in principal, interest rate, loan term, start date, additional up front costs, and any initialized principal or interest already paid (only in the case of refinance calculations).  It returns the summary dataframe needed for visuals.  Since I covered these calculations in [Part 1](https://www.coymcnew.com/post/2021/06/08/mortgage-refinance-calculator-part-1-calculations/), I won't go over them here, and instead I'll just copy the function below for reference.
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+#function for calculating amortization
+my_amort <- function(
+  P, #total principal
+  r_a, #annual interest rate
+  n, #total number of months
+  t0, #start date
+  P0 = 0, #initial principal paid (for refinance calcs)
+  I0 = 0, #initial interest paid (for refinance calcs)
+  add_costs = 0 #additional costs, paid up front
+) {
+  #monthly interest rate
+  r <- r_a/100/12
+  #monthly payment
+  M <- P * r / (1 - (1 + r)^(-n))
+  
+  #loop through months and generate time series
+  #initialize
+  outDF <- tibble()
+  iP <- P
+  iP_paid <- P0
+  iI_paid <- I0
+  it <- t0
+  itotal_paid <- add_costs + P0 + I0
+  for (i in 1:n) {
+    #monthly interest
+    mI <- iP * r
+    #monthly principal
+    mP <- M - mI
+    #ending loan balance
+    iP <- iP - mP
+    #data rows
+    iDF <- tibble(
+      date = it, payment = M, 
+      principal_payment = mP, interest_payment = mI,
+      ending_balance = iP,
+      principal_paid = iP_paid + mP,
+      interest_paid = iI_paid + mI,
+      total_paid = itotal_paid + mP + mI
+    )
+    outDF <- outDF %>% bind_rows(iDF)
+    it <- it + months(1)
+    iP_paid <- iP_paid + mP
+    iI_paid <- iI_paid + mI
+    itotal_paid <- itotal_paid + mP  + mI
+  }
+  return(outDF)
+}
+```
+
+# ui.R
+
+The UI script generates all html required to organize and dsiplay all inputs and outputs.  If you're handy in html and/or css, this script can be endlessly customized to your heart's content.  I've kept things pretty simple here, using entirely built in functions.  I've split the page into two panels, a sidebar that holds all user inputs and a big main panel to house our interactive plots.  Since we have two plots, I'm stacking them vertically as separate tabs.  
+
+I'm including quite a few user inputs here, as the user needs to be able to input all variables for both the original and refinanced mortgage, so that portion of the UI script is quite lengthy.  Below, I'm posting the skeleton of the UI script and I'm omitting the script for the user inputs ~~because it's uninteresting~~ for readability.  If you'd like to see the UI script in its entirety, you can find it on my [github](https://github.com/mcnewcp/shiny-mortgage-refinance/blob/master/mortgage-refinance/ui.R).
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+fluidPage(
+  theme = shinytheme("flatly"), title = "Simple Mortgage Refinance Dashboard",
+  titlePanel("Simple Mortgage Refinance Dashboard"),
+  sidebarLayout(
+    sidebarPanel(
+      ### USER INPUTS ###
+      conditionalPanel(
+        condition = "input.points_yn == 'Yes'",
+        ### USER INPUT POINTS ###
+      ),
+      actionButton(
+        "calc", "Calculate!"
+      )
+    ),
+    
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Overall",
+                 fluidRow(uiOutput("total_text")),
+                 fluidRow(plotlyOutput("total_plot"))),
+        tabPanel("Monthly",
+                 fluidRow(uiOutput("monthly_text")),
+                 fluidRow(plotlyOutput("monthly_plot")))
+      )
+    )
+  )
+)
+```
+
+There are two interesting things I want to call out here.  First, I'm using `conditionalPanel()` to display a panel for mortgage points input only when the user selects "Yes" that they want to include mortgage points.  I'm accessing the user input on the UI side by using `input.var`.  This makes the condition for the conditional panel `input.points_yn == 'Yes'`.
+
+Second, I'm using `uiOutput()` to display a dynamic piece of html text.  I've never used this before but I found it pretty cool.  In the server script I'm generating a text summary of the difference between monthly payments and total paid, which updates whenever the user inputs new values, and this is how I'm dynamically displaying that text in the UI.
+
+# server.R
+
+The server script does most of the heavy lifting for the app, as it generates all outputs as the dynamically user defined inputs change.  Most of what I'm doing in the server script is relatively straightforward and covered in Parts [1](https://www.coymcnew.com/post/2021/06/08/mortgage-refinance-calculator-part-1-calculations/) and [2](https://www.coymcnew.com/post/2021/06/09/mortgage-refinance-calculator-part-2-visuals/) so I'm not going to include the majority of the code here.  I'm just going to point the interesting bits.  To see the server script in it's entirety, visit my [github](https://github.com/mcnewcp/shiny-mortgage-refinance/blob/master/mortgage-refinance/server.R).
+
+One interesting thing I'm doing here that I've never done before is using `isolate()` to control how the reactive elements of the app are updated.  There are a lot of user defined inputs in this app and the user is likely going to need to manually type in each one before the results are relevant.  If the plots changed every time each input was altered, this would lead to a lot of jitter on the plot and unnecessary processing lag.  What I've done here to remedy this is include a "Calculate!" button for the user to click after the inputs are entered.  This button is then stored as `input$calc` and I use it to trigger all reactive element updates, as shown below for calculating the refinanced mortgage dataframe.
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+#amortization for refinanced loan
+dataDF2 <- reactive({
+  input$calc
+  isolate(
+    my_amort(P_refi(), input$r_a_refi, 
+             ifelse(input$n_refi == "30 year", 30*12, 15*12), 
+             t0_refi(), P0_refi(), I0_refi(), add_costs())
+  )
+})
+```
+
+By including the calculation step inside `isolate()` I'm shielding it from the reactive environment, so `reactive({})` is only alerted of a change when the remaining object inside the environment (`input$calc`) is triggered.  I can't remember where I first found this technique online, otherwise I'd give them credit here, but it was very useful to me in this project.
+
+I'll also include here the server side of one of the `uiOutput()` objects I included in the UI.
+
+```{r message=FALSE, warning=FALSE, eval=FALSE}
+#monthly payment
+output$monthly_text <- renderUI({
+  h3(paste(
+    "Monthly Payment: Original =", dollar_format()(dataDF1()$payment[1]), 
+    ", Refinanced =", dollar_format()(dataDF2()$payment[1])
+  ))
+})
+```
+
+It's just a simple paste with text and number reformatted using `dollar_format` from the [`scales`](https://scales.r-lib.org) package, but I think it's pretty neat.  I'm also using `h3()` which is one of many html tag helper functions provided by Shiny.
+
+# Conclusion
+
+The resulting Shiny app is hosted [here](https://mcnewcp.shinyapps.io/mortgage-refinance/).  I was trying to make something very straightforward but also useful and I think I succeeded.  It helped me decide it was time to refinance my mortgage, but more importantly it also successfully convinced my wife!
+
+![](https://media.giphy.com/media/XreQmk7ETCak0/giphy.gif)
