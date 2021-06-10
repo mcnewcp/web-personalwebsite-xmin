@@ -28,6 +28,7 @@ draft: TRUE
 </ul>
 </div>
 
+<p><img src="/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance_2021-06-10.gif" /></p>
 <div id="objective" class="section level1">
 <h1><span class="header-section-number">1</span> Objective</h1>
 <p>As mortgage interest rates <a href="https://themortgagereports.com/61853/30-year-mortgage-rates-chart">continued to decline</a> through early 2021, I decided to see how much we could save by refinancing. Since I knew I would be shopping around from different sources who offer different rates, closing costs, points, etc. I thought this would be a good time to crank out another <a href="https://shiny.rstudio.com/"><code>Shiny</code></a> tool. The objectives of this tool were as follows:</p>
@@ -131,6 +132,7 @@ my_amort &lt;- function(
   )
 )</code></pre>
 <p>There are two interesting things I want to call out here. First, I’m using <code>conditionalPanel()</code> to display a panel for mortgage points input only when the user selects “Yes” that they want to include mortgage points. I’m accessing the user input on the UI side by using <code>input.var</code>. This makes the condition for the conditional panel <code>input.points_yn == 'Yes'</code>.</p>
+<p><img src="/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance-conditionalPanel_2021-06-10.gif" /></p>
 <p>Second, I’m using <code>uiOutput()</code> to display a dynamic piece of html text. I’ve never used this before but I found it pretty cool. In the server script I’m generating a text summary of the difference between monthly payments and total paid, which updates whenever the user inputs new values, and this is how I’m dynamically displaying that text in the UI.</p>
 </div>
 <div id="server.r" class="section level1">
