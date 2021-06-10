@@ -3,6 +3,10 @@ title: 'Mortgage Refinance Calculator Part 1: Calculations'
 author: Coy McNew
 date: '2021-06-08'
 slug: mortgage-refinance-calculator-part-1-calculations
+output:
+  blogdown::html_page:
+    toc: true
+    number_sections: true
 categories:
   - Mortgage Refinance Calculator
 tags:
