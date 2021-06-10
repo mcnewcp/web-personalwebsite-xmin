@@ -13,7 +13,6 @@ tags:
   - shiny
   - html
   - scales
-draft: TRUE
 ---
 ![](/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance_2021-06-10.gif)
 
