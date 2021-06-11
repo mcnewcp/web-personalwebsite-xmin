@@ -13,9 +13,8 @@ tags:
   - shiny
   - html
   - scales
-draft: TRUE
 ---
-
+![](/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance_2021-06-10.gif)
 
 # Objective
 
@@ -128,6 +127,8 @@ fluidPage(
 ```
 
 There are two interesting things I want to call out here.  First, I'm using `conditionalPanel()` to display a panel for mortgage points input only when the user selects "Yes" that they want to include mortgage points.  I'm accessing the user input on the UI side by using `input.var`.  This makes the condition for the conditional panel `input.points_yn == 'Yes'`.
+
+![](/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance-conditionalPanel_2021-06-10.gif)
 
 Second, I'm using `uiOutput()` to display a dynamic piece of html text.  I've never used this before but I found it pretty cool.  In the server script I'm generating a text summary of the difference between monthly payments and total paid, which updates whenever the user inputs new values, and this is how I'm dynamically displaying that text in the UI.
 
