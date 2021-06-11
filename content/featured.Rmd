@@ -1,5 +1,17 @@
 ---
-title: Featured Tools
+title: Featured
 ---
 
-Here's where I'll post some featured tools.
+This page holds a shortlist of my apps or posts that I find particularly interesting or worth sharing.
+
+[<img src="/post/2021-06-10-mortgage-refinance-calculator-part-3-shiny_files/mortgage-refinance_2021-06-10.gif" style="max-height:175px;min-height:100px;float:right;" />](https://mcnewcp.shinyapps.io/mortgage-refinance/)
+
+# Mortgage Refinance Calculator
+### [mcnewcp.shinyapps.io/mortgage-refinance](https://mcnewcp.shinyapps.io/mortgage-refinance/)
+This is a Shiny app that I made while deciding if we should refinance our mortgage.  I used it to run through many refinance options and pick the one that made the most financial sense for us.
+
+[<img src="/post/2021-03-13-nashville-crime-web-app-part-4-shiny_files/nashville-crime-data-map_2021-06-08.gif" style="max-height:175px;min-height:100px;float:right;" />](https://mcnewcp.shinyapps.io/nashville-crime-map/)
+
+# Nashville Crime Map
+### [mcnewcp.shinyapps.io/nashville-crime-map](https://mcnewcp.shinyapps.io/nashville-crime-map/)
+This is a Shiny app I made to investigate live crime data from data.Nashville.gov.  The user can browse individual reported crimes from any time period desired or aggregate based on a few polygon options and play with some fun 3D mapping tools.
