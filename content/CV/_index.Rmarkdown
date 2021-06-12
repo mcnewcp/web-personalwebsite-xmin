@@ -1,6 +1,6 @@
 ---
-title: CV
+
 ---
 
-<embed src="/CV/_index_files/AwesomeCV.pdf" height=1000px; width=100%; />
+<embed src="/CV/_index_files/Coy-McNew-CV-2021.pdf" height=1000px; width=100%; />
 
