@@ -1,0 +1,95 @@
+---
+title: 5 Basic Machine Learning Algorithms with the Caret Package
+author: Coy McNew
+date: '2021-06-24'
+slug: 5-basic-machine-learning-algorithms-with-the-caret-package
+output:
+  blogdown::html_page:
+    toc: true
+    number_sections: true
+categories: []
+tags:
+  - machine learning
+draft: TRUE
+---
+
+# Objective
+
+As I continue to gain exposure to ML and statistical model development and applications in my current work role, I want to make an effort to document these techniques with some personal projects and also experiment with open source data.  In this post, I'm going to focus using the [`caret`](https://cran.r-project.org/web/packages/caret/vignettes/caret.html) package in R.  Short for Classification And REgression Training, the `caret` package does exactly what it says on the tin, provides functions for regression and classification model training.  It provides a uniform, streamlined interface for working with a multitude of ML algorithms, similar to scikit-learn in `Python`.  
+
+I'm going to use the ever reliable iris dataset here and I'm going to apply the following 5 algorithms:
+
+1.    Linear Discriminant Analysis (LDA)
+2.    Classification and Regression Trees (CART)
+3.    k-Nearest Neighbors (kNN)
+4.    Support Vector Machines (SVM)
+5.    Random Forest (RF)
+
+`caret` provides an interface to a multitude of models and I've selected the above 5 for a mixture of linear and nonlinear methods, but any can be applied using a very similar procedure to what I'm using below.
+
+# Datasets
+
+Below I'm loading the iris dataset and splitting into training and test datasets using `createDataPartition()` from `caret`.  Iris contains 4 numeric predictor variables that I'll use to predict `Species`.  Since `Species` is a factor variable, I'll use the iris dataset for the classification algorithms listed above.
+
+```{r warning=FALSE, message=FALSE}
+library(caret)
+library(tidyverse)
+
+irisDF <- iris
+
+#split into train/test 80/20
+index <- createDataPartition(irisDF$Species, p = 0.8, list = FALSE)
+irisDF_train <- irisDF %>%
+  slice(index)
+irisDF_test <- irisDF %>%
+  slice(-index)
+
+#look at the structure
+str(irisDF)
+```
+
+I'm also going to load the Boston housing dataset available in [`mlbench`](https://cran.r-project.org/web/packages/mlbench/mlbench.pdf) and split it into training and test datasets as with iris.  The Boston housing dataset contains some census information about 506 tracts that I'll use to predict corrected median value `cmedv`.  Since `cmedv` is numeric, I'll use the Boston housing dataset for the regression algorithms listed above.
+
+```{r warning=FALSE, message=FALSE}
+library(mlbench) #loads Boston housing data
+
+data("BostonHousing2")
+bh2DF <- BostonHousing2
+
+#split into train/test 80/20
+index <- createDataPartition(bh2DF$cmedv, p = 0.8, list = FALSE)
+bh2DF_train <- bh2DF %>%
+  slice(index)
+bh2DF_test <- bh2DF %>%
+  slice(-index)
+
+#look at the structure
+str(bh2DF)
+```
+
+# Exploratory Data Analysis
+
+The first thing I would always do for a proper EDA is take a look at some in depth descriptive statistics.  Since I'm mainly just exploring the `caret` package here, I'm going to skip that step.  The next step is to visualize bivariate and multivariate relationships between the features and the variable I'm predicting.  `caret` provides `featurePlot()` to automate and streamline this process.  It provides 5 plot options for classification and 2 for regression.  I'll take a look at each below.
+
+## Classification
+
+```{r warning=FALSE, message=FALSE}
+x <- irisDF_train %>%
+  select(-Species)
+y <- irisDF_train %>%
+  pull(Species)
+
+featurePlot(x, y, "box")
+```
+```{r warning=FALSE, message=FALSE}
+featurePlot(x, y, "strip")
+```
+```{r warning=FALSE, message=FALSE}
+featurePlot(x, y, "density")
+```
+```{r warning=FALSE, message=FALSE}
+featurePlot(x, y, "pairs")
+```
+```{r warning=FALSE, message=FALSE}
+featurePlot(x, y, "ellipse")
+```

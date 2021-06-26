@@ -1,0 +1,120 @@
+---
+title: 5 Basic Machine Learning Algorithms with the Caret Package
+author: Coy McNew
+date: '2021-06-24'
+slug: 5-basic-machine-learning-algorithms-with-the-caret-package
+output:
+  blogdown::html_page:
+    toc: true
+    number_sections: true
+categories: []
+tags:
+  - machine learning
+draft: TRUE
+---
+
+
+<div id="TOC">
+<ul>
+<li><a href="#objective"><span class="toc-section-number">1</span> Objective</a></li>
+<li><a href="#datasets"><span class="toc-section-number">2</span> Datasets</a></li>
+<li><a href="#exploratory-data-analysis"><span class="toc-section-number">3</span> Exploratory Data Analysis</a><ul>
+<li><a href="#classification"><span class="toc-section-number">3.1</span> Classification</a></li>
+</ul></li>
+</ul>
+</div>
+
+<div id="objective" class="section level1">
+<h1><span class="header-section-number">1</span> Objective</h1>
+<p>As I continue to gain exposure to ML and statistical model development and applications in my current work role, I want to make an effort to document these techniques with some personal projects and also experiment with open source data. In this post, I’m going to focus using the <a href="https://cran.r-project.org/web/packages/caret/vignettes/caret.html"><code>caret</code></a> package in R. Short for Classification And REgression Training, the <code>caret</code> package does exactly what it says on the tin, provides functions for regression and classification model training. It provides a uniform, streamlined interface for working with a multitude of ML algorithms, similar to scikit-learn in <code>Python</code>.</p>
+<p>I’m going to use the ever reliable iris dataset here and I’m going to apply the following 5 algorithms:</p>
+<ol style="list-style-type: decimal">
+<li>Linear Discriminant Analysis (LDA)</li>
+<li>Classification and Regression Trees (CART)</li>
+<li>k-Nearest Neighbors (kNN)</li>
+<li>Support Vector Machines (SVM)</li>
+<li>Random Forest (RF)</li>
+</ol>
+<p><code>caret</code> provides an interface to a multitude of models and I’ve selected the above 5 for a mixture of linear and nonlinear methods, but any can be applied using a very similar procedure to what I’m using below.</p>
+</div>
+<div id="datasets" class="section level1">
+<h1><span class="header-section-number">2</span> Datasets</h1>
+<p>Below I’m loading the iris dataset and splitting into training and test datasets using <code>createDataPartition()</code> from <code>caret</code>. Iris contains 4 numeric predictor variables that I’ll use to predict <code>Species</code>. Since <code>Species</code> is a factor variable, I’ll use the iris dataset for the classification algorithms listed above.</p>
+<pre class="r"><code>library(caret)
+library(tidyverse)
+
+irisDF &lt;- iris
+
+#split into train/test 80/20
+index &lt;- createDataPartition(irisDF$Species, p = 0.8, list = FALSE)
+irisDF_train &lt;- irisDF %&gt;%
+  slice(index)
+irisDF_test &lt;- irisDF %&gt;%
+  slice(-index)
+
+#look at the structure
+str(irisDF)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    150 obs. of  5 variables:
+##  $ Sepal.Length: num  5.1 4.9 4.7 4.6 5 5.4 4.6 5 4.4 4.9 ...
+##  $ Sepal.Width : num  3.5 3 3.2 3.1 3.6 3.9 3.4 3.4 2.9 3.1 ...
+##  $ Petal.Length: num  1.4 1.4 1.3 1.5 1.4 1.7 1.4 1.5 1.4 1.5 ...
+##  $ Petal.Width : num  0.2 0.2 0.2 0.2 0.2 0.4 0.3 0.2 0.2 0.1 ...
+##  $ Species     : Factor w/ 3 levels &quot;setosa&quot;,&quot;versicolor&quot;,..: 1 1 1 1 1 1 1 1 1 1 ...</code></pre>
+<p>I’m also going to load the Boston housing dataset available in <a href="https://cran.r-project.org/web/packages/mlbench/mlbench.pdf"><code>mlbench</code></a> and split it into training and test datasets as with iris. The Boston housing dataset contains some census information about 506 tracts that I’ll use to predict corrected median value <code>cmedv</code>. Since <code>cmedv</code> is numeric, I’ll use the Boston housing dataset for the regression algorithms listed above.</p>
+<pre class="r"><code>library(mlbench) #loads Boston housing data
+
+data(&quot;BostonHousing2&quot;)
+bh2DF &lt;- BostonHousing2
+
+#split into train/test 80/20
+index &lt;- createDataPartition(bh2DF$cmedv, p = 0.8, list = FALSE)
+bh2DF_train &lt;- bh2DF %&gt;%
+  slice(index)
+bh2DF_test &lt;- bh2DF %&gt;%
+  slice(-index)
+
+#look at the structure
+str(bh2DF)</code></pre>
+<pre><code>## &#39;data.frame&#39;:    506 obs. of  19 variables:
+##  $ town   : Factor w/ 92 levels &quot;Arlington&quot;,&quot;Ashland&quot;,..: 54 77 77 46 46 46 69 69 69 69 ...
+##  $ tract  : int  2011 2021 2022 2031 2032 2033 2041 2042 2043 2044 ...
+##  $ lon    : num  -71 -71 -70.9 -70.9 -70.9 ...
+##  $ lat    : num  42.3 42.3 42.3 42.3 42.3 ...
+##  $ medv   : num  24 21.6 34.7 33.4 36.2 28.7 22.9 27.1 16.5 18.9 ...
+##  $ cmedv  : num  24 21.6 34.7 33.4 36.2 28.7 22.9 22.1 16.5 18.9 ...
+##  $ crim   : num  0.00632 0.02731 0.02729 0.03237 0.06905 ...
+##  $ zn     : num  18 0 0 0 0 0 12.5 12.5 12.5 12.5 ...
+##  $ indus  : num  2.31 7.07 7.07 2.18 2.18 2.18 7.87 7.87 7.87 7.87 ...
+##  $ chas   : Factor w/ 2 levels &quot;0&quot;,&quot;1&quot;: 1 1 1 1 1 1 1 1 1 1 ...
+##  $ nox    : num  0.538 0.469 0.469 0.458 0.458 0.458 0.524 0.524 0.524 0.524 ...
+##  $ rm     : num  6.58 6.42 7.18 7 7.15 ...
+##  $ age    : num  65.2 78.9 61.1 45.8 54.2 58.7 66.6 96.1 100 85.9 ...
+##  $ dis    : num  4.09 4.97 4.97 6.06 6.06 ...
+##  $ rad    : int  1 2 2 3 3 3 5 5 5 5 ...
+##  $ tax    : int  296 242 242 222 222 222 311 311 311 311 ...
+##  $ ptratio: num  15.3 17.8 17.8 18.7 18.7 18.7 15.2 15.2 15.2 15.2 ...
+##  $ b      : num  397 397 393 395 397 ...
+##  $ lstat  : num  4.98 9.14 4.03 2.94 5.33 ...</code></pre>
+</div>
+<div id="exploratory-data-analysis" class="section level1">
+<h1><span class="header-section-number">3</span> Exploratory Data Analysis</h1>
+<p>The first thing I would always do for a proper EDA is take a look at some in depth descriptive statistics. Since I’m mainly just exploring the <code>caret</code> package here, I’m going to skip that step. The next step is to visualize bivariate and multivariate relationships between the features and the variable I’m predicting. <code>caret</code> provides <code>featurePlot()</code> to automate and streamline this process. It provides 5 plot options for classification and 2 for regression. I’ll take a look at each below.</p>
+<div id="classification" class="section level2">
+<h2><span class="header-section-number">3.1</span> Classification</h2>
+<pre class="r"><code>x &lt;- irisDF_train %&gt;%
+  select(-Species)
+y &lt;- irisDF_train %&gt;%
+  pull(Species)
+
+featurePlot(x, y, &quot;box&quot;)</code></pre>
+<p><img src="/post/2021-06-24-5-basic-machine-learning-algorithms-with-the-caret-package_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<pre class="r"><code>featurePlot(x, y, &quot;strip&quot;)</code></pre>
+<p><img src="/post/2021-06-24-5-basic-machine-learning-algorithms-with-the-caret-package_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<pre class="r"><code>featurePlot(x, y, &quot;density&quot;)</code></pre>
+<p><img src="/post/2021-06-24-5-basic-machine-learning-algorithms-with-the-caret-package_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<pre class="r"><code>featurePlot(x, y, &quot;pairs&quot;)</code></pre>
+<p><img src="/post/2021-06-24-5-basic-machine-learning-algorithms-with-the-caret-package_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<pre class="r"><code>featurePlot(x, y, &quot;ellipse&quot;)</code></pre>
+<p><img src="/post/2021-06-24-5-basic-machine-learning-algorithms-with-the-caret-package_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+</div>
+</div>
