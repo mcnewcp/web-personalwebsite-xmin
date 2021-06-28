@@ -1,8 +1,8 @@
 ---
-title: 5 Basic Machine Learning Algorithms with the Caret Package
+title: Exploring Machine Learning Workflow with the Caret Package
 author: Coy McNew
 date: '2021-06-24'
-slug: 5-basic-machine-learning-algorithms-with-the-caret-package
+slug: exploring-machine-learning-workflow-with-the-caret-package
 output:
   blogdown::html_page:
     toc: true
@@ -10,12 +10,11 @@ output:
 categories: []
 tags:
   - machine learning
-draft: TRUE
 ---
 
 # Objective
 
-As I continue to gain exposure to ML and statistical model development and applications in my current work role, I want to make an effort to document these techniques with some personal projects and also experiment with open source data.  In this post, I'm going to focus using the [`caret`](https://cran.r-project.org/web/packages/caret/vignettes/caret.html) package in R.  Short for Classification And REgression Training, the `caret` package does exactly what it says on the tin, provides functions for regression and classification model training.  It provides a uniform, streamlined interface for working with a multitude of ML algorithms, similar to scikit-learn in `Python`.  
+My objective with this post is to use a simple ML classification problem to explore the workflow afforded by the [`caret`](https://cran.r-project.org/web/packages/caret/vignettes/caret.html) package in R.  Short for Classification And REgression Training, the `caret` package does exactly what it says on the tin, provides functions for regression and classification model training.  It provides a uniform, streamlined interface for working with a multitude of ML algorithms, similar to scikit-learn in `Python`.  
 
 I'm going to use the ever reliable iris dataset here and I'm going to apply the following 5 algorithms:
 
@@ -29,7 +28,11 @@ I'm going to use the ever reliable iris dataset here and I'm going to apply the 
 
 # Datasets
 
-Below I'm loading the iris dataset and splitting into training and test datasets using `createDataPartition()` from `caret`.  Iris contains 4 numeric predictor variables that I'll use to predict `Species`.  Since `Species` is a factor variable, I'll use the iris dataset for the classification algorithms listed above.
+Below I'm loading the iris dataset and splitting into training and test datasets using `createDataPartition()` from `caret`.  Iris contains 4 numeric predictor variables that I'll use to predict `Species`. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(lattice)
+```
 
 ```{r warning=FALSE, message=FALSE}
 library(caret)
@@ -48,48 +51,226 @@ irisDF_test <- irisDF %>%
 str(irisDF)
 ```
 
-I'm also going to load the Boston housing dataset available in [`mlbench`](https://cran.r-project.org/web/packages/mlbench/mlbench.pdf) and split it into training and test datasets as with iris.  The Boston housing dataset contains some census information about 506 tracts that I'll use to predict corrected median value `cmedv`.  Since `cmedv` is numeric, I'll use the Boston housing dataset for the regression algorithms listed above.
-
-```{r warning=FALSE, message=FALSE}
-library(mlbench) #loads Boston housing data
-
-data("BostonHousing2")
-bh2DF <- BostonHousing2
-
-#split into train/test 80/20
-index <- createDataPartition(bh2DF$cmedv, p = 0.8, list = FALSE)
-bh2DF_train <- bh2DF %>%
-  slice(index)
-bh2DF_test <- bh2DF %>%
-  slice(-index)
-
-#look at the structure
-str(bh2DF)
-```
-
 # Exploratory Data Analysis
 
-The first thing I would always do for a proper EDA is take a look at some in depth descriptive statistics.  Since I'm mainly just exploring the `caret` package here, I'm going to skip that step.  The next step is to visualize bivariate and multivariate relationships between the features and the variable I'm predicting.  `caret` provides `featurePlot()` to automate and streamline this process.  It provides 5 plot options for classification and 2 for regression.  I'll take a look at each below.
+The first thing I would always do for a proper EDA is take a look at some in depth descriptive statistics.  Since I'm mainly just exploring the `caret` package here, I'm going to skip that step.  The next step is to visualize univariate and bivariate relationships between the features and the dependent variable.  `caret` provides `featurePlot()` to automate and streamline this process.  It provides 5 plot options for classification and 2 for regression.  I'll take a look at the classification options below.
 
-## Classification
+The first two plot types, "box" and "strip", serve a similar purpose.  They compare the range of feature values contained in each class of your predicted variable.  This lets you see if there is any separation between classes based on any feature and also gives an indication of whether or not feature scaling will be important.  "Box" achives this using box plots and "strip" achieves this by plotting the full dataset.
 
 ```{r warning=FALSE, message=FALSE}
 x <- irisDF_train %>%
   select(-Species)
 y <- irisDF_train %>%
   pull(Species)
+featurePlot(x, y, "box", scale = "free")
+```
 
-featurePlot(x, y, "box")
-```
 ```{r warning=FALSE, message=FALSE}
-featurePlot(x, y, "strip")
+featurePlot(x, y, "strip", scale = "free", jitter = TRUE)
 ```
+
+In each case I allowed for free scales on each feature, which I wouldn't want to do if I intended to compare the scales directly, e.g. to determine if feature scaling is necessary.  I also added jitter to the "strip" plot as I think it's far easier to see the distribution this way.  
+
+These plots are similar to a version I typically employ at the EDA stage of every project, which is a combination of the two using `ggplot2` and  `plotly` for interactivity, as shown below. 
+
 ```{r warning=FALSE, message=FALSE}
-featurePlot(x, y, "density")
+library(ggplot2)
+library(plotly)
+p <- irisDF_train %>%
+  pivot_longer(!Species, names_to = "feature") %>%
+  ggplot(aes(x = Species, y = value)) + 
+  geom_boxplot() + 
+  geom_jitter(aes(color = Species), height = 0, alpha = 0.7) + 
+  facet_wrap("feature", scales = "free") + 
+  theme_bw()
+ggplotly(p)
 ```
+
+I definitely still like my version of this plot better, but the `featurePlot` versions each took me a single line of code, while my version above took some data pivoting followed by another 7 lines of plotting code so `featurePlot` is definitely quicker and easier to execute.
+
+The next option "density" plots the distribution of each feature by classification of the dependent variable.  It's pretty similar to the plots above except we're looking at pdf.  
+
+```{r warning=FALSE, message=FALSE}
+featurePlot(x, y, "density", scale = "free")
+```
+
+The next two options, "pairs" and "ellipse", display bivariate relationships between each possible pair of features and colors the points by the class of the dependent variable.  These plots give you an indication on collinearity between features and also let you investigate whether the dependent variable is linearly separable by any combination of two features.  
+
 ```{r warning=FALSE, message=FALSE}
 featurePlot(x, y, "pairs")
 ```
+
+"ellipse" takes this a step further by drawing ellipses around each class.  I quite like this plot, it does a lot of investigative work for a single line of code.
+
 ```{r warning=FALSE, message=FALSE}
 featurePlot(x, y, "ellipse")
 ```
+
+The bivariate plots are pretty similar to another function I use quite often, [`ggpairs`](https://www.rdocumentation.org/packages/GGally/versions/1.5.0/topics/ggpairs) from [`GGally`](https://github.com/ggobi/ggally).  
+
+```{r warning=FALSE, message=FALSE}
+library(GGally)
+ggpairs(irisDF_train, columns = 1:4)
+```
+
+`ggpairs` is just as easy to implement and it goes quite a bit further by adding the distribution plots, correlation coefficients of each bivariate relationship, and even significance tests of the relationships, represented by asterisks on the correlation coefficients.  It's also possible to investigate the relationships within each class of the dependent variable by adding a color mapping, as below.
+
+```{r warning=FALSE, message=FALSE}
+library(GGally)
+ggpairs(irisDF_train, aes(color = Species), columns = 1:4)
+```
+
+This gives you quite a bit of information about the features and their relationships in a dense but simple format, which is just as easy to implement and for this reason I prefer `ggpairs`.
+
+# Model Training
+
+There are [238 total models](https://topepo.github.io/caret/available-models.html) available in the `caret` package and the package makes it very easy to train many different models on your data and compare.  I've picked the 5 following models because they're frequently used and they range in complexity.  First, I'm going to set up training for 10-fold cross validation, repeated 10 times.
+
+```{r warning=FALSE, message=FALSE}
+trControl <- trainControl(method = "repeatedcv", number = 10, repeats = 10)
+```
+
+Since I want to be able to compare results between each model, I'm going to use `set.seed` so my CV splits are identical for each model.
+
+```{r warning=FALSE, message=FALSE}
+set.seed(34)
+#LDA
+fit_lda <- train(Species~., data = irisDF_train, method = "lda", trControl = trControl)
+set.seed(34)
+#CART
+fit_cart <- train(Species~., data = irisDF_train, method = "rpart", trControl = trControl)
+set.seed(34)
+#kNN
+fit_knn <- train(Species~., data = irisDF_train, method = "knn", trControl = trControl)
+set.seed(34)
+#SVM
+fit_svm <- train(Species~., data = irisDF_train, method = "svmRadial", trControl = trControl)
+set.seed(34)
+#Random Forest
+fit_rf <- train(Species~., data = irisDF_train, method = "rf", trControl = trControl)
+```
+
+Of course, `caret` allows for in depth custom model parameter tuning, but I'm going to leave it here for now.
+
+# Model Performance
+
+The next step is to compare performance between the models and make statistical statements about their performance differences.  First, I'll use `resamples` to compile the resampling results from each model training.
+
+```{r message=FALSE, warning=FALSE}
+resamps <- resamples(list(
+  lda = fit_lda, 
+  cart = fit_cart, 
+  knn = fit_knn, 
+  svm = fit_svm, 
+  rf = fit_rf
+))
+```
+
+The easiest way to quickly compare model performance is to simply pass the resample object to `summary`, which will print relevant metrics for each model.  Since this is a classification problem, accuracy and kappa are chosen by default, though these can be set with the metric argument in `train`.
+
+```{r message=FALSE, warning=FALSE}
+summary(resamps)
+```
+
+Or if you need a visual to understand stats, like me, then you can simply pass the resample object to `dotplot` from the `lattice` package.
+
+```{r message=FALSE, warning=FALSE}
+trellis.par.set(caretTheme())
+dotplot(resamps)
+```
+
+There are several other ways to visualize [performance comparisons](https://topepo.github.io/caret/model-training-and-tuning.html#exploring-and-comparing-resampling-distributions) using `lattice` and `caret`, e.g. `splom(resamps)` produces a scatterplot matrix of direct model comparisons, but for the sake of brevity I'm not going to get into any more here.  
+
+Since I set the seed before each model training step, my models were trained on the exact same splits of the dataset and so it makes sense to compare them directly by taking the differences in performance.  I can then use a simple t-test to determine if the model performance actually differs to a chosen level of statistical confidence.  
+
+```{r message=FALSE, warning=FALSE}
+difValues <- diff(resamps)
+summary(difValues)
+```
+
+By using `diff` and `summary` this is achieved in two lines of code.  The printout provided by summary here is really handy, the top diagonal displays estimates of the differences between models and the bottom diagonal displays p-values for t-tests with the null hypothesis that the differences are equal to zero.
+
+If I instead want to visualize the distribution of differences, I can do so using any of the methods described above for viewing model performance.
+
+```{r message=FALSE, warning=FALSE}
+trellis.par.set(caretTheme())
+bwplot(difValues)
+```
+
+# Model Selection
+
+Based on the above investigation, it looks like LDA is my best model, though it doesn't perform better than kNN according to my t-test of differences.  There are a number of ways to investigate my chosen model.  The first, most simple method is to pass my train object to `print`.
+
+```{r message=FALSE, warning=FALSE}
+print(fit_lda)
+```
+
+I can also visualize in a cross tab format using `CrossTable` from the [`gmodels`](https://rdrr.io/cran/gmodels/) package.  I like the crosstab version for classification problems because one look and it's abundantly clear where any miscategorizations lie. 
+
+```{r message=FALSE, warning=FALSE}
+lda_pred <- predict(fit_lda, newdata = irisDF_train)
+reference <- y
+gmodels::CrossTable(reference, lda_pred)
+```
+
+Now I'll check my model against the test dataset I held out from model training.  By testing with a dataset that the model has not yet seen, I'm getting an independent measure of model accuracy which will alert me to any mistakes in model training, especially overfitting.  I can then use `confusionMatrix` to generate a crosstab of results, along with a number of other model performance statistics, explained in detail [elsewhere](https://topepo.github.io/caret/measuring-performance.html#measures-for-predicted-classes).
+
+```{r message=FALSE, warning=FALSE}
+lda_pred_test <- predict(fit_lda, newdata = irisDF_test)
+confusionMatrix(lda_pred_test, irisDF_test$Species)
+```
+
+In this case my LDA model predicted the test dataset with 100% accuracy!  The iris dataset is very easy to model though, so let's not throw any parades just yet.
+
+# Model Visualization 
+
+I also just want to mention a method or two to visualize the models trained by this workflow.  I feel like often the disconnect to understanding, and sometimes distrust, of these kinds of models is the lack of a clean and understandable visual of what the model *looks like*.
+
+The model that won the day in this exercise is LDA.  LDA is particularly interesting to me because I run a lot of PCAs.  LDA is like a supervised learning version of the unsupervised PCA, because LDA uses the *correct* answers from the dependent variable while PCA does not.  Therefore, LDA should in theory give better data separation.  Since both methods provide dimensionality reduction, they are good candidates to visualize in 2D scatter plots.
+
+```{r message=FALSE, warning=FALSE}
+#run pca for comparison
+pca <- prcomp(irisDF %>% select(-Species), center = TRUE, scale. = TRUE)
+#prop variance explained
+prop_pca = pca$sdev^2/sum(pca$sdev^2)
+
+#predict lda on full dataset
+lda_pred_total <- predict(fit_lda$finalModel, newdata = irisDF[-5])
+#prop variance explained
+prop_lda <- fit_lda$finalModel$svd^2/sum(fit_lda$finalModel$svd^2)
+
+plotDF = data.frame(
+  species = irisDF$Species,
+  pca = pca$x, lda = lda_pred_total$x
+)
+
+library(scales)
+library(patchwork)
+p1 <- ggplot(plotDF) + geom_point(aes(lda.LD1, lda.LD2, colour = species, shape = species), size = 2.5) + 
+  labs(x = paste0("LD1 (", percent(prop_lda[1]), ")"),
+       y = paste0("LD2 (", percent(prop_lda[2]), ")")) + 
+  theme_bw()
+
+p2 <- ggplot(plotDF) + geom_point(aes(pca.PC1, pca.PC2, colour = species, shape = species), size = 2.5) +
+  labs(x = paste0("PC1 (", percent(prop_pca[1]), ")"),
+       y = paste0("PC2 (", percent(prop_pca[2]), ")")) + 
+  theme_bw()
+
+wrap_plots(list(p1, p2), nrow = 2, guides = "collect")
+```
+
+It is visually clear that the LDA displays far better separation between versicolor and virginica than the PCA does.  LD1 also explains 99% of the variance, which means this data can be effectively reduced to a single variable!
+
+I really like decision trees.  I just think it's really fascinating that machine learning algorithms can produce such a humanly output as a decision tree.  Unlike many of the ML models, which require a robot brain to understand, the decision tree is immediately recognizable.  So just for fun, I want to show how easy it is to visualize the CART model I trained above, which still had > 90% accuracy.
+
+```{r message=FALSE, warning=FALSE}
+par(xpd = NA) # otherwise on some devices the text is clipped
+plot(fit_cart$finalModel)
+text(fit_cart$finalModel, digits = 3)
+```
+
+The decision tree above is telling me that I can categorize the data with > 90% accuracy by making simple above/below decisions on 1-2 variables.  That's really cool to me.
+
+# Conclusion
+
+I haven't exactly set the world on fire with the models I've trained in this post, but my intent was to simply walk through the ML workflow in R using `caret` and I think I've done a decent job of that.  As ML gains more and more fame, the massive potential upside becomes more and more clear.  At the same time the barrier to entry is dropping rapidly, as I've shown in this post the workflow is quite simple and accessibility quite high.  This is very exciting but also underpins the importance on model selection, understanding, and interpretation. 
